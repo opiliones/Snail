@@ -1,0 +1,1416 @@
+#snale
+#
+
+setenv LANG C
+let snale ./.stack-work/install/x86_64-linux/lts-12.16/8.4.4/bin/snale-exe
+exist? $snale || exit 1
+
+fn test @{
+  printf "testing "
+  show $@
+  let i 0
+  let -s stat -r ret -o out -e err $@
+
+  fn mod @{
+    get $1
+    let -r $1 $2 $?
+    return @{$@}
+  }
+
+  return @{$@}
+}
+
+fn chk @{
+  $3 get $1 && ($2=$?) && succ $3
+  
+  $3 get $1 -> echo expected $2, but 
+  $3 mod i @($1+1)
+  fail $?
+}
+
+fn ret? @{chk ret $@}
+fn out? @{chk out $@}
+fn err? @{chk err $@}
+fn stat? @{chk stat $@}
+
+fn pass? @{
+  $1 get i -> @($1=0) => echo Pass
+  echo Fail
+}
+
+# echo and expand
+
+test echo a
+-> ret? 0
+-> out? a
+-> err? ""
+-> stat? $T
+-> pass?
+
+let -r n (1+0)
+test echo $n
+-> ret? 0
+-> out? 1
+-> err? ""
+-> stat? $T
+-> pass?
+
+(1.0+0)
+test echo $?
+-> ret? 0
+-> out? 1
+-> err? ""
+-> stat? $T
+-> pass?
+
+test echo -a b c
+-> ret? 0
+-> out? "-a b c"
+-> err? ""
+-> stat? $T
+-> pass?
+
+test echo --
+-> ret? 0
+-> out? --
+-> err? ""
+-> stat? $T
+-> pass?
+
+test echo [a b c]
+-> ret? 0
+-> out? "a b c"
+-> err? ""
+-> stat? $T
+-> pass?
+
+test echo [a [b c]]
+-> ret? 0
+-> out? "a b c"
+-> err? ""
+-> stat? $T
+-> pass?
+
+test echo []
+-> ret? 0
+-> out? ""
+-> err? ""
+-> stat? $T
+-> pass?
+
+test echo
+-> ret? 0
+-> out? ""
+-> err? ""
+-> stat? $T
+-> pass?
+
+# redirect
+
+rm -f /tmp/tmp_for_test
+rm -f /tmp/tmp_for_test2
+
+test {echo a > /tmp/tmp_for_test}
+-> ret? 0
+-> out? ""
+-> err? ""
+-> stat? $T
+-> pass?
+
+test {echo a > &2}
+-> ret? 0
+-> out? ""
+-> err? "a"
+-> stat? $T
+-> pass?
+
+test {hoge >[2] &1}
+-> ret? 127
+-> out? "hoge: snale: runInteractiveProcess: exec: does not exist (No such file or directory)"
+-> err? ""
+-> stat? $F
+-> pass?
+
+test {cat </tmp/tmp_for_test}
+-> ret? 0
+-> out? "a"
+-> err? ""
+-> stat? $T
+-> pass?
+
+test {echo a > /tmp/tmp_for_test > /tmp/tmp_for_test2}
+-> ret? 0
+-> out? ""
+-> err? ""
+-> stat? $T
+-> pass?
+
+rm -f /tmp/tmp_for_test
+
+test {try -a {cat </tmp/tmp_for_test}}
+-> ret? 2
+-> out? ""
+-> err? "/tmp/tmp_for_test: no such file or directory"
+-> stat? $F
+-> pass?
+
+test {cat </tmp/tmp_for_test2}
+-> ret? 0
+-> out? "a"
+-> err? ""
+-> stat? $T
+-> pass?
+
+test {hoge > /tmp/tmp_for_test}
+-> ret? 127
+-> out? ""
+-> err? "hoge: snale: runInteractiveProcess: exec: does not exist (No such file or directory)"
+-> stat? $F
+-> pass?
+
+test {cat </tmp/tmp_for_test}
+-> ret? 0
+-> out? ""
+-> err? ""
+-> stat? $T
+-> pass?
+
+test {hoge >[2] /tmp/tmp_for_test}
+-> ret? 127
+-> out? ""
+-> err? ""
+-> stat? $F
+-> pass?
+
+test {cat </tmp/tmp_for_test}
+-> ret? 0
+-> out? "hoge: snale: runInteractiveProcess: exec: does not exist (No such file or directory)"
+-> stat? $T
+-> pass?
+
+test {{echo a; hoge} >[2=1] /tmp/tmp_for_test}
+-> ret? 127
+-> out? ""
+-> err? ""
+-> stat? $F
+-> pass?
+
+test {cat < /tmp/tmp_for_test > /tmp/tmp_for_test2}
+-> ret? 0
+-> out? ""
+-> err? ""
+-> stat? $T
+-> pass?
+
+test {cat < /tmp/tmp_for_test2}
+-> ret? 0
+-> out? "a
+hoge: snale: runInteractiveProcess: exec: does not exist (No such file or directory)"
+-> err? ""
+-> stat? $T
+-> pass?
+
+rm -f /tmp/tmp_for_test
+
+test {echo a >> /tmp/tmp_for_test}
+-> ret? 0
+-> out? ""
+-> err? ""
+-> stat? $T
+-> pass?
+
+test {cat </tmp/tmp_for_test}
+-> ret? 0
+-> out? "a"
+-> err? ""
+-> stat? $T
+-> pass?
+
+test {echo a >>[2] /tmp/tmp_for_test}
+-> ret? 0
+-> out? "a"
+-> err? ""
+-> stat? $T
+-> pass?
+
+test {cat </tmp/tmp_for_test}
+-> ret? 0
+-> out? "a"
+-> err? ""
+-> stat? $T
+-> pass?
+
+test {echo a >>[1] /tmp/tmp_for_test}
+-> ret? 0
+-> out? ""
+-> err? ""
+-> stat? $T
+-> pass?
+
+test {cat </tmp/tmp_for_test}
+-> ret? 0
+-> out? "a
+a"
+-> err? ""
+-> stat? $T
+-> pass?
+
+test {hoge >>[2=1] /tmp/tmp_for_test}
+-> ret? 127
+-> out? ""
+-> err? ""
+-> stat? $F
+-> pass?
+
+test {cat </tmp/tmp_for_test}
+-> ret? 0
+-> out? "a
+a
+hoge: snale: runInteractiveProcess: exec: does not exist (No such file or directory)"
+-> err? ""
+-> stat? $T
+-> pass?
+
+rm -f /tmp/tmp_for_test2
+
+test {{echo a; hoge} >>[2] /tmp/tmp_for_test >> /tmp/tmp_for_test2}
+-> ret? 127
+-> out? ""
+-> err? ""
+-> stat? $F
+-> pass?
+
+test {cat </tmp/tmp_for_test}
+-> ret? 0
+-> out? "a
+a
+hoge: snale: runInteractiveProcess: exec: does not exist (No such file or directory)
+hoge: snale: runInteractiveProcess: exec: does not exist (No such file or directory)"
+-> err? ""
+-> stat? $T
+-> pass?
+
+test {cat </tmp/tmp_for_test2}
+-> ret? 0
+-> out? "a"
+-> err? ""
+-> stat? $T
+-> pass?
+
+# pipe
+
+test {echo a | grep a}
+-> ret? 0
+-> out? "a"
+-> err? ""
+-> stat? $T
+-> pass?
+
+test {echo a | grep b}
+-> ret? 1
+-> out? ""
+-> err? ""
+-> stat? $F
+-> pass?
+
+test {hoge >[2] &1 | grep hoge:}
+-> ret? 127
+-> out? "hoge: snale: runInteractiveProcess: exec: does not exist (No such file or directory)"
+-> err? ""
+-> stat? $F
+-> pass?
+
+test {yes | head -n1}
+-> ret? -13
+-> out? "y"
+-> err? ""
+-> stat? $F
+-> pass?
+
+test {yes | head -n2 | head -n1}
+-> ret? -13
+-> out? "y"
+-> err? ""
+-> stat? $F
+-> pass?
+
+test {echo a | grep a > /tmp/tmp_for_test}
+-> ret? 0
+-> out? ""
+-> err? ""
+-> stat? $T
+-> pass?
+
+test {cat </tmp/tmp_for_test}
+-> ret? 0
+-> out? "a"
+-> err? ""
+-> stat? $T
+-> pass?
+
+test {{yes; echo a >&2} | {head -n1; head -n1}}
+-> ret? 0
+-> out? "y
+y"
+-> err? "a"
+-> stat? $T
+-> pass?
+
+let a [{yes a || :} {grep a || :} {head -n1}]
+test {\| $@a}
+-> ret? 0
+-> out? "a"
+-> err? ""
+-> stat? $T
+-> pass?
+
+# and or
+
+test {: 1 && echo a}
+-> ret? 0
+-> out? "a"
+-> err? ""
+-> stat? $T
+-> pass?
+
+test {not : 1 && echo a}
+-> ret? 1
+-> out? ""
+-> err? ""
+-> stat? $F
+-> pass?
+
+test {: 1 && echo $?}
+-> ret? 0
+-> out? "1"
+-> err? ""
+-> stat? $T
+-> pass?
+
+test {: 1 && not :}
+-> ret? 1
+-> out? ""
+-> err? ""
+-> stat? $F
+-> pass?
+
+test {: 1 && let -r unbind echo a}
+-> ret? 0
+-> out? "a"
+-> err? ""
+-> stat? $T
+-> pass?
+
+test get unbind
+-> ret? []
+-> out? ""
+-> err? ""
+-> stat? $F
+-> pass?
+
+test {: 1 || echo a}
+-> ret? 1
+-> out? ""
+-> err? ""
+-> stat? $T
+-> pass?
+
+test {not : 1 || echo a}
+-> ret? 0
+-> out? "a"
+-> err? ""
+-> stat? $T
+-> pass?
+
+test {not : 1 || echo $?}
+-> ret? 0
+-> out? "1"
+-> err? ""
+-> stat? $T
+-> pass?
+
+test {not : 1 || not :}
+-> ret? 1
+-> out? ""
+-> err? ""
+-> stat? $F
+-> pass?
+
+test {not : 1 || let -r unbind echo a}
+-> ret? 0
+-> out? "a"
+-> err? ""
+-> stat? $T
+-> pass?
+
+test get unbind
+-> ret? []
+-> out? ""
+-> err? ""
+-> stat? $F
+-> pass?
+
+test {: && : && echo a}
+-> ret? 0
+-> out? "a"
+-> err? ""
+-> stat? $T
+-> pass?
+
+test {not : || not : || echo a}
+-> ret? 0
+-> out? "a"
+-> err? ""
+-> stat? $T
+-> pass?
+
+test {: && echo b || echo a}
+-> ret? 0
+-> out? "b"
+-> err? ""
+-> stat? $T
+-> pass?
+
+test {not : && echo b || echo a}
+-> ret? 0
+-> out? "a"
+-> err? ""
+-> stat? $T
+-> pass?
+
+test {: && not echo b || echo a}
+-> ret? 0
+-> out? "b
+a"
+-> err? ""
+-> stat? $T
+-> pass?
+
+test {: 1 && fail; echo b}
+-> ret? []
+-> out? ""
+-> err? ""
+-> stat? $F
+-> pass?
+
+test {: 1 && {echo a; fail}; echo b}
+-> ret? 0
+-> out? "a
+b"
+-> err? ""
+-> stat? $T
+-> pass?
+
+# allow
+
+test {: 1 => echo $?; echo b}
+-> ret? 0
+-> out? "1"
+-> err? ""
+-> stat? $T
+-> pass?
+
+test {: 1 => {echo $?}; echo b}
+-> ret? 0
+-> out? "1"
+-> err? ""
+-> stat? $T
+-> pass?
+
+test {: 1 && : 2 => echo $?; echo b}
+-> ret? 0
+-> out? "2"
+-> err? ""
+-> stat? $T
+-> pass?
+
+test {not : 1 => echo $?; echo b}
+-> ret? 0
+-> out? "b"
+-> err? ""
+-> stat? $T
+-> pass?
+
+test {not : 1 && : 2 => echo $?; echo b}
+-> ret? 0
+-> out? "b"
+-> err? ""
+-> stat? $T
+-> pass?
+
+test {
+  let a [b c]
+  ($a=[b])   => echo b
+  ($a=[b c]) => echo c
+  ($a=[b c]) => echo d
+
+  echo e
+}
+-> ret? 0
+-> out? "c"
+-> err? ""
+-> stat? $T
+-> pass?
+
+# cd
+
+test {cd /var/tmp; pwd}
+-> ret? 0
+-> out? "/var/tmp"
+-> err? ""
+-> stat? $T
+-> pass?
+
+test {cd /var//tmp; cd ..; pwd}
+-> ret? 0
+-> out? "/var"
+-> err? ""
+-> stat? $T
+-> pass?
+
+test {cd /var/.; cd tmp; pwd}
+-> ret? 0
+-> out? "/var/tmp"
+-> err? ""
+-> stat? $T
+-> pass?
+
+test {cd /; cd var/tmp; pwd}
+-> ret? 0
+-> out? "/var/tmp"
+-> err? ""
+-> stat? $T
+-> pass?
+
+test {cd /tmp; cd ../var/tmp; pwd}
+-> ret? 0
+-> out? "/var/tmp"
+-> err? ""
+-> stat? $T
+-> pass?
+
+let -r home getenv HOME
+test {cd; pwd}
+-> ret? 0
+-> out? $home
+-> err? ""
+-> stat? $T
+-> pass?
+
+test {cd / /tmp; pwd}
+-> ret? 0
+-> out? "/"
+-> err? ""
+-> stat? $T
+-> pass?
+
+# load
+
+echo "
+echo loading
+def load_test_var a
+fn load_test_fn {echo loaded; return}
+" > /tmp/tmp_for_test
+
+test {
+  let -r v {load /tmp/tmp_for_test; return @{$@}}
+  $v get load_test_var && echo $?
+  $v load_test_fn
+}
+-> ret? []
+-> out? "loading
+a
+loaded"
+-> err? ""
+-> stat? $T
+-> pass?
+
+test {load /tmp/tmp_for_test; echo $load_test_var; load_test_fn}
+-> ret? []
+-> out? "loading
+a
+loaded"
+-> err? ""
+-> stat? $T
+-> pass?
+
+test {
+  let -r v {load /tmp/tmp_for_test; return @{$@}}
+  let load_test_var a
+}
+-> ret? a
+-> out? "loading"
+-> err? ""
+-> stat? $T
+-> pass?
+
+# return
+
+test {: 1; return; echo a}
+-> ret? []
+-> out? ""
+-> err? ""
+-> stat? $T
+-> pass?
+
+test {{: 1; return; echo a}; echo b}
+-> ret? 0
+-> out? "b"
+-> err? ""
+-> stat? $T
+-> pass?
+
+test {not : 1; return; echo a}
+-> ret? []
+-> out? ""
+-> err? ""
+-> stat? $F
+-> pass?
+
+test {return a; echo a}
+-> ret? a
+-> out? ""
+-> err? ""
+-> stat? $T
+-> pass?
+
+test {return a b; echo a}
+-> ret? [a b]
+-> out? ""
+-> err? ""
+-> stat? $T
+-> pass?
+
+test {return [a b]; echo a}
+-> ret? [a b]
+-> out? ""
+-> err? ""
+-> stat? $T
+-> pass?
+
+test {let -r v spawn {sleep 100 >[2=1]/dev/null}; return $v; echo a}
+-> out? ""
+-> err? ""
+-> stat? $T
+-> pass?
+
+# succ
+
+test {: 1; succ; echo a}
+-> ret? []
+-> out? ""
+-> err? ""
+-> stat? $T
+-> pass?
+
+test {{: 1; succ; echo a}; echo b}
+-> ret? 0
+-> out? "b"
+-> err? ""
+-> stat? $T
+-> pass?
+
+test {not : 1; succ; echo a}
+-> ret? []
+-> out? ""
+-> err? ""
+-> stat? $T
+-> pass?
+
+test {succ a; echo a}
+-> ret? a
+-> out? ""
+-> err? ""
+-> stat? $T
+-> pass?
+
+test {succ a b; echo a}
+-> ret? [a b]
+-> out? ""
+-> err? ""
+-> stat? $T
+-> pass?
+
+test {succ [a b]; echo a}
+-> ret? [a b]
+-> out? ""
+-> err? ""
+-> stat? $T
+-> pass?
+
+test {let -r v spawn {sleep 100 >[2=1]/dev/null}; succ $v; echo a}
+-> out? ""
+-> err? ""
+-> stat? $T
+-> pass?
+
+# fail
+
+test {: 1; fail; echo a}
+-> ret? []
+-> out? ""
+-> err? ""
+-> stat? $F
+-> pass?
+
+test {{: 1; fail; echo a}; echo b}
+-> ret? 0
+-> out? "b"
+-> err? ""
+-> stat? $T
+-> pass?
+
+test {not : 1; fail; echo a}
+-> ret? []
+-> out? ""
+-> err? ""
+-> stat? $F
+-> pass?
+
+test {fail a; echo a}
+-> ret? a
+-> out? ""
+-> err? ""
+-> stat? $F
+-> pass?
+
+test {fail a b; echo a}
+-> ret? [a b]
+-> out? ""
+-> err? ""
+-> stat? $F
+-> pass?
+
+test {fail [a b]; echo a}
+-> ret? [a b]
+-> out? ""
+-> err? ""
+-> stat? $F
+-> pass?
+
+test {let -r v spawn {sleep 100 >[2=1]/dev/null}; fail $v; echo a}
+-> out? ""
+-> err? ""
+-> stat? $F
+-> pass?
+
+# exit
+
+test {spawn {{: 1; exit; echo a}; echo b} -> wait}
+-> ret? 0
+-> out? ""
+-> err? ""
+-> stat? $T
+-> pass?
+
+test {spawn {{not : 1; exit; echo a}; echo b} -> wait}
+-> ret? 0
+-> out? ""
+-> err? ""
+-> stat? $T
+-> pass?
+
+test {spawn {{exit 0; echo a}; echo b} -> wait}
+-> ret? 0
+-> out? ""
+-> err? ""
+-> stat? $T
+-> pass?
+
+test {spawn {{exit 2; echo a}; echo b} -> wait}
+-> ret? 2
+-> out? ""
+-> err? ""
+-> stat? $F
+-> pass?
+
+test {spawn {{exit -2; echo a}; echo b} -> wait}
+-> ret? 22
+-> out? ""
+-> err? "-2 is not natural number"
+-> stat? $F
+-> pass?
+
+test {spawn {{exit a; echo a}; echo b} -> wait}
+-> ret? 22
+-> out? ""
+-> err? '"a" cannot be read as number'
+-> stat? $F
+-> pass?
+
+# break
+
+test {keep {: 1; break; echo a}}
+-> ret? 1
+-> out? ""
+-> err? ""
+-> stat? $T
+-> pass?
+
+test {keep {: 1; break; echo a}; echo b}
+-> ret? 0
+-> out? "b"
+-> err? ""
+-> stat? $T
+-> pass?
+
+test {keep {not : 1; break; echo a}}
+-> ret? 1
+-> out? ""
+-> err? ""
+-> stat? $F
+-> pass?
+
+test {keep {break a; echo a}}
+-> ret? a
+-> out? ""
+-> err? ""
+-> stat? $T
+-> pass?
+
+test {keep {not :; break a; echo a}}
+-> ret? a
+-> out? ""
+-> err? ""
+-> stat? $F
+-> pass?
+
+test {keep {break a b; echo a}}
+-> ret? [a b]
+-> out? ""
+-> err? ""
+-> stat? $T
+-> pass?
+
+test {keep {not :; break [a b]; echo a}}
+-> ret? [a b]
+-> out? ""
+-> err? ""
+-> stat? $F
+-> pass?
+
+test {keep loop @{echo a; ($1+1>2) && break} 0}
+-> ret? 2
+-> out? "a
+a
+a"
+-> err? ""
+-> stat? $T
+-> pass?
+
+# let
+
+test {let var hoge; echo $var}
+-> ret? 0
+-> out? "hoge"
+-> err? ""
+-> stat? $T
+-> pass?
+
+test {let var var2 hoge; echo $var && echo $var2}
+-> ret? 0
+-> out? "hoge
+hoge"
+-> err? ""
+-> stat? $T
+-> pass?
+
+test {let var [hoge fuga]; show $@var}
+-> ret? 0
+-> out? '"hoge" "fuga"'
+-> err? ""
+-> stat? $T
+-> pass?
+
+test {let [var var2] [hoge fuga] && show $var $var2}
+-> ret? 0
+-> out? '"hoge" "fuga"'
+-> err? ""
+-> stat? $T
+-> pass?
+
+test {let [var [var2 var3]] [hoge [fuga fuge]] && echo $var $var2 $var3}
+-> ret? 0
+-> out? "hoge fuga fuge"
+-> err? ""
+-> stat? $T
+-> pass?
+
+test {let [var var2 var3] [hoge fuga]}
+-> ret? [hoge fuga]
+-> out? ""
+-> err? ""
+-> stat? $F
+-> pass?
+
+test {let [var var2] [hoge fuga fugu]}
+-> ret? [hoge fuga fugu]
+-> out? ""
+-> err? ""
+-> stat? $F
+-> pass?
+
+test {let _ hoge}
+-> ret? hoge
+-> out? ""
+-> err? ""
+-> stat? $T
+-> pass?
+
+#test {let * hoge}
+#-> ret? []
+#-> out? ""
+#-> err? ""
+#-> stat? $F
+#-> pass?
+#
+#test {let @ hoge}
+#-> ret? []
+#-> out? ""
+#-> err? ""
+#-> stat? $F
+#-> pass?
+#
+#test {let ? hoge}
+#-> ret? []
+#-> out? ""
+#-> err? ""
+#-> stat? $F
+#-> pass?
+#
+#test {let 1 hoge}
+#-> ret? []
+#-> out? ""
+#-> err? ""
+#-> stat? $F
+#-> pass?
+#
+#test {let 1a hoge}
+#-> ret? []
+#-> out? ""
+#-> err? ""
+#-> stat? $F
+#-> pass?
+#
+#test {let var * hoge}
+#-> ret? []
+#-> out? ""
+#-> err? ""
+#-> stat? $F
+#-> pass?
+
+test {let -r var -r var2 echo a && echo $var $var2}
+-> ret? 0
+-> out? "a
+0 0"
+-> err? ""
+-> stat? $T
+-> pass?
+
+test {let -o var -o var2 echo a && echo $var $var2}
+-> ret? 0
+-> out? "a a"
+-> err? ""
+-> stat? $T
+-> pass?
+
+# define
+
+test {def var hoge}
+-> ret? hoge
+-> out? ""
+-> err? ""
+-> stat? $T
+-> pass?
+
+test {def var hoge}
+-> ret? hoge
+-> out? ""
+-> err? ""
+-> stat? $T
+-> pass?
+
+test try {def var hoge; def var hoge}
+-> ret? 22
+-> out? ""
+-> err? '"var" is already defined'
+-> stat? $F
+-> pass?
+
+test try {def var var hoge}
+-> ret? 22
+-> out? ""
+-> err? '"var" is already defined'
+-> stat? $F
+-> pass?
+
+# fn
+
+test {fn f {hoge}}
+-> ret? []
+-> out? ""
+-> err? ""
+-> stat? $T
+-> pass?
+
+test {fn f {hoge}}
+-> ret? []
+-> out? ""
+-> err? ""
+-> stat? $T
+-> pass?
+
+test try {fn f {hoge}; fn f {hoge}}
+-> ret? 22
+-> out? ""
+-> err? '"f" is already defined'
+-> stat? $F
+-> pass?
+
+# read
+
+test {echo a | {let -r b read && echo a=$b}}
+-> ret? 0
+-> out? "a=a"
+-> err? ""
+-> stat? $T
+-> pass?
+
+test {echo a | read && echo a=$?}
+-> ret? 0
+-> out? "a=a"
+-> err? ""
+-> stat? $T
+-> pass?
+
+test {{echo a; echo b} | keep loop {read && echo out=$? || break}}
+-> ret? []
+-> out? "out=a
+out=b"
+-> err? ""
+-> stat? $F
+-> pass?
+
+test {{echo abc; echo def} | keep loop {read -n1 && echo out=$? || break}}
+-> ret? []
+-> out? "out=a
+out=b
+out=c
+out=
+
+out=d
+out=e
+out=f
+out="
+-> err? ""
+-> stat? $F
+-> pass?
+
+test {{echo abc; echo def} | keep loop {read -n2 && echo out=$? || break}}
+-> ret? []
+-> out? "out=ab
+out=c
+
+out=de
+out=f"
+-> err? ""
+-> stat? $F
+-> pass?
+
+test {{echo abc; echo def} | keep loop {read -in1 && echo out=$? || break}}
+-> ret? []
+-> out? "out=a
+out=b
+out=c
+out=d
+out=e
+out=f"
+-> err? ""
+-> stat? $F
+-> pass?
+
+# get
+
+test {let var1 a; let n 1; get var$n && echo $?}
+-> ret? 0
+-> out? "a"
+-> err? ""
+-> stat? $T
+-> pass?
+
+test {let var1 a; let n 2; get var$n && echo $?}
+-> ret? []
+-> out? ""
+-> err? ""
+-> stat? $F
+-> pass?
+
+# poll
+
+test {spawn {sleep 2.5}; let a $?; keep loop {poll $a && break || echo wait; sleep 1}}
+-> ret? [$T 0]
+-> out? "wait
+wait
+wait"
+-> err? ""
+-> stat? $T
+-> pass?
+
+# stop
+
+test {spawn {sleep 10 >[2=1] /dev/null} -> let a; stop $a; timeo 1 {wait $a}}
+-> ret? 130
+-> out? ""
+-> err? ""
+-> stat? $F
+-> pass?
+
+# glob
+
+mkdir /tmp/sbale_test_dir
+{
+  cd /tmp/sbale_test_dir
+  touch ab abc 123 a.log
+
+  test {glob * -> len}
+  -> ret? 4
+  -> out? ""
+  -> err? ""
+  -> stat? $T
+  -> pass?
+  
+  test {glob *.log}
+  -> ret? [a.log]
+  -> out? ""
+  -> err? ""
+  -> stat? $T
+  -> pass?
+
+  test {glob "[123][123]*"}
+  -> ret? [123]
+  -> out? ""
+  -> err? ""
+  -> stat? $T
+  -> pass?
+
+  let -o dir pwd
+
+  test {glob -f ab*}
+  -> ret? $dir/ab["" c]
+  -> out? "" 
+  -> err? ""
+  -> stat? $T
+  -> pass?
+}
+rm -rf /tmp/sbale_test_dir
+
+# splt
+
+test {splt " a b  c "}
+-> ret? [a b c]
+-> out? ""
+-> err? ""
+-> stat? $T
+-> pass?
+
+test {splt \  " a b  c "}
+-> ret? ["" a b "" c ""]
+-> out? ""
+-> err? ""
+-> stat? $T
+-> pass?
+
+test {splt , ",a,b,,c,"}
+-> ret? ["" a b "" c ""]
+-> out? ""
+-> err? ""
+-> stat? $T
+-> pass?
+
+test {splt . ",a,b,,c,"}
+-> ret? [,a,b,,c,]
+-> out? ""
+-> err? ""
+-> stat? $T
+-> pass?
+
+# sub
+
+test {sub a.c x abcde}
+-> ret? xde
+-> out? ""
+-> err? ""
+-> stat? $T
+-> pass?
+
+test {sub x.y x abcde}
+-> ret? abcde
+-> out? ""
+-> err? ""
+-> stat? $T
+-> pass?
+
+# map
+
+test {map @(1+$1) [1 2 3]}
+-> ret? [2 3 4]
+-> out? ""
+-> err? ""
+-> stat? $T
+-> pass?
+
+test {map -b @{($1=2) && fail; echo $1} [1 2 3]}
+-> ret? [0 []]
+-> out? "1"
+-> err? ""
+-> stat? $F
+-> pass?
+
+test {map -r @(1+$1) [1 [2 3]]}
+-> ret? [2 [3 4]]
+-> out? ""
+-> err? ""
+-> stat? $T
+-> pass?
+
+test {map -br @{($1=2) && fail; echo $1} [1 [2 3]]}
+-> ret? [0 [[]]]
+-> out? "1"
+-> err? ""
+-> stat? $F
+-> pass?
+
+# fold
+
+test {fold @($1+$2) 0 [1 2 3]}
+-> ret? 6
+-> out? ""
+-> err? ""
+-> stat? $T
+-> pass?
+
+test {fold -b @{($2=2) && fail; ($1+$2)} 0 [1 2 3]}
+-> ret? []
+-> out? ""
+-> err? ""
+-> stat? $F
+-> pass?
+
+test {fold -r @($2+$1) 0 [1 [2 3]]}
+-> ret? 6
+-> out? ""
+-> err? ""
+-> stat? $T
+-> pass?
+
+test {fold -br @{($2=2) && fail; ($1+$2)} 0 [1 [2 3]]}
+-> ret? []
+-> out? ""
+-> err? ""
+-> stat? $F
+-> pass?
+
+# len
+
+test {len [1 2 3]}
+-> ret? 3
+-> out? ""
+-> err? ""
+-> stat? $T
+-> pass?
+
+test {len 1 [2 3]}
+-> ret? 3
+-> out? ""
+-> err? ""
+-> stat? $T
+-> pass?
+
+test {len -c asd}
+-> ret? 3
+-> out? ""
+-> err? ""
+-> stat? $T
+-> pass?
+
+test {len -c asd sdc}
+-> ret? 6
+-> out? ""
+-> err? ""
+-> stat? $T
+-> pass?
+
+# loop
+
+test {keep loop @{($1+1=3) && break} 0}
+-> ret? 3
+-> out? ""
+-> err? ""
+-> stat? $T
+-> pass?
+
+# idx
+
+test {idx 2 [1 2 3]}
+-> ret? 2
+-> out? ""
+-> err? ""
+-> stat? $T
+-> pass?
+
+test {idx -1 [1 2 3]}
+-> ret? 3
+-> out? ""
+-> err? ""
+-> stat? $T
+-> pass?
+
+test {idx 1 2 [1 2 3]}
+-> ret? [1 2]
+-> out? ""
+-> err? ""
+-> stat? $T
+-> pass?
+
+test {idx 2 -1 [1 2 3]}
+-> ret? [2 3]
+-> out? ""
+-> err? ""
+-> stat? $T
+-> pass?
+
+# spawn
+#
+#test {}
+#-> ret? []
+#-> out? ""
+#-> err? ""
+#-> stat? $T
+#-> pass?
+
+# exist?
+#
+#test {}
+#-> ret? []
+#-> out? ""
+#-> err? ""
+#-> stat? $T
+#-> pass?
+
+# list?
+
+test {list? []}
+-> ret? []
+-> out? ""
+-> err? ""
+-> stat? $T
+-> pass?
+
+test {list? a}
+-> ret? a
+-> out? ""
+-> err? ""
+-> stat? $F
+-> pass?
+
+

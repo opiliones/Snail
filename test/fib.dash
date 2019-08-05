@@ -1,0 +1,17 @@
+set -f
+
+fib() {
+  local n=$1
+  [ $n -lt 3 ] && {
+    RET=1
+    return
+  }
+  fib $((n-1))
+  local k=$RET
+  fib $((n-2))
+  RET=$((k+RET))
+}
+
+fib $1
+echo $RET
+

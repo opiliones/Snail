@@ -1,0 +1,91 @@
+cabal-version: 1.12
+
+-- This file has been generated from package.yaml by hpack version 0.31.1.
+--
+-- see: https://github.com/sol/hpack
+--
+-- hash: 210804e0e5ddea3c794d2a89019c88ba7972b1a60379b7489b41b65ebcb10ce7
+
+name:           snale
+version:        0.1.0.0
+description:    Please see the README on Github at <https://github.com/githubuser/snale#readme>
+homepage:       https://github.com/githubuser/snale#readme
+bug-reports:    https://github.com/githubuser/snale/issues
+author:         Author name here
+maintainer:     example@example.com
+copyright:      2018 Author name here
+license:        BSD3
+license-file:   LICENSE
+build-type:     Simple
+extra-source-files:
+    README.md
+    ChangeLog.md
+
+source-repository head
+  type: git
+  location: https://github.com/githubuser/snale
+
+library
+  exposed-modules:
+      LinuxEcode
+      LinuxSignal
+  other-modules:
+      Paths_snale
+  hs-source-dirs:
+      src
+  build-depends:
+      base >=4.7 && <5
+    , containers
+    , text
+    , unix
+    , unordered-containers
+  default-language: Haskell2010
+
+executable snale-exe
+  main-is: Main.hs
+  other-modules:
+      Paths_snale
+  hs-source-dirs:
+      app
+  ghc-options: -threaded -feager-blackholing -rtsopts -with-rtsopts=-N -XStrictData -XStrict -O3
+  build-depends:
+      Glob
+    , base >=4.7 && <5
+    , bytestring
+    , containers
+    , debug
+    , directory
+    , either
+    , filepath
+    , haskeline
+    , io-streams
+    , megaparsec
+    , mtl
+    , parsec
+    , process
+    , regex-posix
+    , repline
+    , scientific
+    , snale
+    , split
+    , temporary
+    , text
+    , text-show
+    , transformers
+    , unix
+    , unordered-containers
+    , utf8-string
+  default-language: Haskell2010
+
+test-suite snale-test
+  type: exitcode-stdio-1.0
+  main-is: Spec.hs
+  other-modules:
+      Paths_snale
+  hs-source-dirs:
+      test
+  ghc-options: -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      base >=4.7 && <5
+    , snale
+  default-language: Haskell2010
