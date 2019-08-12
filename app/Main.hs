@@ -21,7 +21,7 @@ import           Data.IORef
 import           Data.List
 import qualified Data.List.Split           as S
 --import qualified Data.Map.Strict           as M
-import qualified Data.HashMap.Strict       as M
+import qualified Data.HashMap.Strict       as H
 import qualified Data.HashSet              as HS
 import           Data.Maybe
 import           Data.Monoid
@@ -59,7 +59,7 @@ import qualified TextShow                  as TS
 data Env = Env { status :: Bool,
                  ret    :: [Val],
                  args   :: [Val],
-                 vars   :: M.HashMap T.Text Val,
+                 vars   :: H.HashMap T.Text Val,
                  inn    :: Handle,
                  out    :: Handle,
                  err    :: Handle,
@@ -67,7 +67,7 @@ data Env = Env { status :: Bool,
                  parenv :: ParseEnv,
                  funID  :: Int,
                  dir    :: String,
-                 funcs  :: IORef (M.HashMap T.Text Val),
+                 funcs  :: IORef (H.HashMap T.Text Val),
                  thread :: IORef ThreadInfo,
                  idSrc  :: IORef Int
                  }
@@ -79,7 +79,7 @@ sethandles denv senv = denv { out = out senv,
 setRetEnv env renv = env { status = status renv,
                            ret    = ret renv }
 
-defaultEnv :: FilePath -> IORef (M.HashMap T.Text Val) -> IORef ThreadInfo -> IORef Int -> Env
+defaultEnv :: FilePath -> IORef (H.HashMap T.Text Val) -> IORef ThreadInfo -> IORef Int -> Env
 defaultEnv =
   Env True
       []
@@ -108,17 +108,18 @@ data ThreadInfo = ThreadInfo { tid      :: ThreadId,
                                exitTrap :: Val
                                }
 
-defaultVars :: M.HashMap T.Text Val
-defaultVars = M.fromList [
+defaultVars :: H.HashMap T.Text Val
+defaultVars = H.fromList [
   ("T", Bool True),
   ("F", Bool False)
   ]
 
 
 
-defaultFuncs :: M.HashMap T.Text Val
-defaultFuncs = M.fromList [
+defaultFuncs :: H.HashMap T.Text Val
+defaultFuncs = H.fromList [
   ("ret"   , Prim Normal return' ["[COMMAND]..."]),
+  ("dict"  , Prim Purely dict    ["[KEY VALUE]..."]),
   ("+"     , Prim Purely plus''  ["[VALUE]..."]),
   ("true"  , Prim Purely true    ["[VALUE]..."]),
   (":"     , Prim Purely colon   ["VALUE..."]),
@@ -127,8 +128,8 @@ defaultFuncs = M.fromList [
   ("break" , Prim Normal break'  ["[VALUE]..."]),
   ("breakT", Prim Normal breakT  ["[VALUE]..."]),
   ("breakF", Prim Normal breakF  ["[VALUE]..."]),
-  ("let"   , Prim Normal unavail ["-r NAME... COMMAND"
-                                 ,"NAME... VALUE"]),
+  ("let"   , Prim Normal unavail ["NAME... VALUE"]),
+  ("letr"  , Prim Normal unavail ["-r NAME... COMMAND"]),
   ("def"   , Prim Normal unavail ["NAME {COMMAND|VALUE}"]),
   ("trap"  , Prim Normal trap    ["COMMAND SIGNAL..."]),
   ("cd"    , Prim Normal cd      ["[DIR]"]),
@@ -167,6 +168,16 @@ defaultFuncs = M.fromList [
 usagePrint name = Eval $ throwError ([], SomeError $ usageShow name)
 
 unavail env xs = Eval $ throwError ([], SomeError $ "cannot call special functions pia variable")
+
+dict env xs = do
+  d <- dict' env H.empty xs
+  return env{ret=[Dict d], status=True}
+  where
+    dict' :: Env -> (H.HashMap T.Text Val) -> [Val] -> Eval (H.HashMap T.Text Val)
+    dict' env m (k:v:xs) = do
+      t <- expand env k
+      dict' env (H.insert t v m) xs
+    dict' env m _ = return m
 
 shift env [] = shift env [Float 1]
 shift env [n] = do
@@ -294,7 +305,7 @@ usage env xs = Eval $ throwError ([fromEno eINVAL], NumArgs "1" $ length xs)
 
 usageShow :: T.Text -> String
 usageShow n =
-  case M.lookup n defaultFuncs of
+  case H.lookup n defaultFuncs of
     Just (Prim _ _ usage) -> T.unpack $
       case usage of
         [] -> "sorry, no usage"
@@ -420,12 +431,14 @@ getIntForIdx xs x = do
       | n < 0 -> return $ length xs + n + 1
       | otherwise -> return n
 
-set env (Str _ "-r":xs@(_:_:[])) =
+setRet env (xs@(_:_:[])) =
   let vars = init xs
       cmd = last xs  in do
     renv <- eval [cmd] env
     venv <- foldM (\e->uncurry (setVar e)) env $ zip vars (ret renv)
     return venv{ret=ret renv}
+setRet env xs = Eval $ throwError ([fromEno eINVAL], NumArgs "2 or more" $ length xs)
+
 set env xs@(_:_:[]) =
   let v = last xs  in do
     renv <- foldM (\e name->setVar e name v) env (init xs)
@@ -435,7 +448,7 @@ set env xs = Eval $ throwError ([fromEno eINVAL], NumArgs "2 or more" $ length x
 setVar :: Env -> Val -> Val -> Eval Env
 setVar env (Str _ name) v
   | name == "_" = return env{status=True}
-  | otherwise = return $ env {vars=M.insert name v $ vars env, status=True}
+  | otherwise = return $ env {vars=H.insert name v $ vars env, status=True}
 setVar env (List x) (List v) =
   case zipMaybe x v of
     Just y -> do
@@ -449,17 +462,17 @@ zipMaybe [] [] = Just []
 zipMaybe (x:xs) (y:ys) = ((x, y):) <$> zipMaybe xs ys
 zipMaybe _ _ = Nothing
 
---getOptEasy :: [T.Text] -> [T.Text] -> T.Text -> [Val] -> Eval ([Val], M.HashMap T.Text [Val])
+--getOptEasy :: [T.Text] -> [T.Text] -> T.Text -> [Val] -> Eval ([Val], H.HashMap T.Text [Val])
 --getOptEasy havArg noArg name (Str _ s:xs)
---  | s == "--" = return (xs, M.empty)
+--  | s == "--" = return (xs, H.empty)
 --  | T.isPrefixOf "--" s && elem s havArg = do
 --    (vs, ret) <- getOptEasy havArg noArg name $ tail xs
---    case M.lookup s ret of
---      Just _  -> return (vs, M.adjust (head xs:) s ret)
---      Nothing -> return (vs, M.insert s [head xs] ret)
+--    case H.lookup s ret of
+--      Just _  -> return (vs, H.adjust (head xs:) s ret)
+--      Nothing -> return (vs, H.insert s [head xs] ret)
 --  | T.isPrefixOf "--" s && elem s noArg = do
 --    (vs, ret) <- getOptEasy havArg noArg name $ tail xs
---    return (vs, M.insert s [] ret)
+--    return (vs, H.insert s [] ret)
 --  | T.take 2 s `elem` havArg = do
 --    (arg, ys) <- case () of
 --                   _| T.length s == 2 && not (null xs) -> return (head xs, tail xs)
@@ -467,22 +480,22 @@ zipMaybe _ _ = Nothing
 --                      Eval $ throwError ([fromEno eNOENT], SomeError $ usageShow name)
 --                    | otherwise -> return (Str _ $ T.drop 2 s, xs)
 --    (vs, ret) <- getOptEasy havArg noArg name ys
---    if M.member (T.take 2 s) ret
---      then return (vs, M.adjust (arg:) (T.take 2 s) ret)
---      else return (vs, M.insert (T.take 2 s) [arg] ret)
+--    if H.member (T.take 2 s) ret
+--      then return (vs, H.adjust (arg:) (T.take 2 s) ret)
+--      else return (vs, H.insert (T.take 2 s) [arg] ret)
 --  | T.take 2 s `elem` noArg =
 --    let ys = if T.length s == 2
 --               then xs
 --               else (Str _ $ "-" `T.append` T.drop 2 s):xs
 --    in do
 --      (vs, ret) <- getOptEasy havArg noArg name ys
---      return (vs, M.insert (T.take 2 s) [] ret)
+--      return (vs, H.insert (T.take 2 s) [] ret)
 --  | T.isPrefixOf "-" s && s /= "-" = Eval $ throwError ([fromEno eNOENT], SomeError $ usageShow name)
---getOptEasy havArg noArg name xs = return (xs, M.empty)
+--getOptEasy havArg noArg name xs = return (xs, H.empty)
 
---exclusiveOpt :: [T.Text] -> T.Text -> M.HashMap T.Text [Val] -> Eval ()
+--exclusiveOpt :: [T.Text] -> T.Text -> H.HashMap T.Text [Val] -> Eval ()
 --exclusiveOpt list name opt
---  | length (M.filterWithKey (\x y -> elem x list) opt) < 2 = return ()
+--  | length (H.filterWithKey (\x y -> elem x list) opt) < 2 = return ()
 --  | otherwise = Eval $ throwError ([fromEno eNOENT], SomeError $ usageShow name)
 
 def env [Str _ name, body@Lambda{}] = def' env name body
@@ -493,15 +506,9 @@ def env x = Eval $ throwError ([fromEno eINVAL], NumArgs "2" $ length x)
 def' :: Env -> T.Text -> Val -> Eval Env
 def' env name body = do
   fs <- liftIO $ readIORef $ funcs env
-  case M.lookup name fs of
-    Nothing -> def'' fs
-    _ | interactiveMode $ flags env -> do def'' fs
-    _ -> Eval $ throwError ([fromEno eINVAL], SomeError $ show name ++ " is already defined")
-  where
-    def'' fs = do
-      liftIO $ writeIORef (funcs env) $ M.insert name body fs
-      renv <- incFunID env
-      return renv{status=True, ret=[]}
+  liftIO $ writeIORef (funcs env) $ H.insert name body fs
+  renv <- incFunID env
+  return renv{status=True, ret=[]}
 
 optHead :: [Val] -> T.Text -> (T.Text, T.Text, [Val])
 optHead xs t | t /= "" = (T.take 1 t, T.tail t, xs)
@@ -760,13 +767,14 @@ trap env (f:ys) = do
             throwTo tid E.ThreadKilled
           _ -> putMVar cmdMvar ()
     txSignal (Str _ s) =
-      case M.lookup s signalMap of
+      case H.lookup s signalMap of
         Just x -> return x
         _ -> Eval $ throwError ([fromEno eINVAL], SomeError $ show s ++ " is not signal")
 
 data Val = Float Double
          | Str (Maybe(IORef Cache)) T.Text
 --         | Sym T.Text
+         | Dict (H.HashMap T.Text Val)
          | Bool Bool
          | FD Word
          | VarM VarT
@@ -806,7 +814,7 @@ instance Ord Val where
 
 data Cache = NoCache
            | Cache {clsrId :: Int, cache :: Val}
-           | NoFunc
+           | NoFunc Int
 
 data VarT = VarN T.Text
           | VarA Int
@@ -848,6 +856,22 @@ valExpand env (VarM x:xs) = do
 valExpand env (Lambda Expand _ Nothing x:xs) = do
   renv <- x env
   (ret renv ++) <$> valExpand env xs
+valExpand env (Lambda PipeRd _ Nothing x:xs) = do
+  (i,o) <- liftIO $ PI.createPipe
+  liftIO $ PI.setFdOption o PI.CloseOnExec True
+  h <- liftIO $ PI.fdToHandle o
+  spawn env $ do x env{out=h}
+                 liftIO $ hClose h
+                 return env
+  (toStr ("/dev/fd/" `T.append` TS.showt i) :) <$> valExpand env xs
+valExpand env (Lambda PipeWt _ Nothing x:xs) = do
+  (i,o) <- liftIO $ PI.createPipe
+  liftIO $ PI.setFdOption i PI.CloseOnExec True
+  h <- liftIO $ PI.fdToHandle i
+  spawn env $ do x env{inn=h}
+                 liftIO $ hClose h
+                 return env
+  (toStr ("/dev/fd/" `T.append` TS.showt o) :) <$> valExpand env xs
 valExpand env (Lambda f p Nothing x:xs) = (Lambda f p (Just env) x:) <$> valExpand env xs
 valExpand env (List x:xs) = do
   v <- valExpand env x
@@ -882,7 +906,7 @@ getVarMaybe env (VarR 0) = getVarMaybe env (VarR 1)
 getVarMaybe env (VarR n) = let vs = ret env in
   if greater n vs then Just $ vs !! (n-1)
                   else Nothing
-getVarMaybe env (VarN t) = M.lookup t $ vars env
+getVarMaybe env (VarN t) = H.lookup t $ vars env
 
 greater :: Int -> [a] -> Bool
 greater n _      | n < 1 = True
@@ -932,6 +956,8 @@ data LambdaType = Normal
                 | NoArgs
                 | Expand
                 | Purely
+                | PipeRd
+                | PipeWt
   deriving Eq
 
 data ShError = Returned     Bool
@@ -964,16 +990,20 @@ throwShError env (v, e) = do liftIO $ hPrint (err env) (show e)
 -- parser
 --
 
-data ParseEnv = ParseEnv {allocCount :: Int, addArg :: Maybe Val
+data ParseEnv = ParseEnv {allocCount :: Int
+                        , addArg :: Maybe Val
                         , defFn :: HS.HashSet T.Text
                         , defPureFn :: HS.HashSet T.Text
                         , unDefPureFn :: HS.HashSet T.Text
-                        , defVar :: HS.HashSet T.Text
+--                        , varCount :: Int
+--                        , lexDepth :: Int
+--                        , varInfo :: H.HashMap T.Text (Int, Int)
                         , isErr :: Maybe Custom
                         , parseFlags :: Flags}
   deriving Show
-defaultParseEnv = ParseEnv 0 Nothing HS.empty HS.empty HS.empty HS.empty Nothing (Flags False False)
+defaultParseEnv = ParseEnv 0 Nothing HS.empty HS.empty HS.empty {-0 0 (H.empty)-} Nothing (Flags False False)
 incAllocCount = modify (\x->x{allocCount=allocCount x + 1})
+--incVarCount = modify (\x->x{varCount=varCount x + 1})
 
 setPureFn :: T.Text -> Parser ()
 setPureFn name = do x <- get
@@ -999,13 +1029,14 @@ setFn name = do x <- get
                 else
                   put x{defFn=HS.insert name $ defFn x}
   
-setDefVar :: T.Text -> Parser ()
-setDefVar name = modify $ \x->x{defVar=HS.insert name $ defVar x}
-chkVar :: T.Text -> Parser ()
-chkVar name = do x <- get
-                 if HS.member name $ defVar x
-                   then return ()
-                   else notDefined name
+--setDefVar :: T.Text -> Parser ()
+--setDefVar name = modify $ \x->x{defVar=HS.insert name $ defVar x}
+--
+--chkVar :: T.Text -> Parser ()
+--chkVar name = do x <- get
+--                 if HS.member name $ defVar x
+--                   then return ()
+--                   else notDefined name
 
 data Custom = NotPureFunc T.Text
             | MultiDefine T.Text
@@ -1076,6 +1107,7 @@ eval' d xs env = do
       renv <- d env [f]
       boolDispatch renv (status renv) ys zs
     Bool b:ys -> boolDispatch env b ys zs
+    Dict x:ys -> valExpand env zs >>= (dictDispatch x env) . (ys ++)
     ys -> valExpand env zs >>= (d env) . (ys ++)
 
 boolDispatch :: Env -> Bool -> [Val] -> [Val] -> Eval Env
@@ -1087,6 +1119,24 @@ boolDispatch env b xs ys = do
              else do zs <- valExpand env ys2
                      return env{ret=xs2 ++ zs, status=True}
 
+dictDispatch :: (H.HashMap T.Text Val) -> Env -> [Val] -> Eval Env
+dictDispatch d env [] = let vs = map toStr $ H.keys d in
+                          return env{ret=vs, status=not $ null vs}
+dictDispatch d env [x] = do
+  k <- expand env x
+  case H.lookup k d of
+    Just v -> return env{ret=[v], status=True}
+    _ -> return env{ret=[], status=False}
+dictDispatch d env xs = do
+  d <- dictDispatch' d env xs
+  return env{ret=[Dict d], status=True}
+  where
+    dictDispatch' d env [] = return d
+    dictDispatch' d env [x] = Eval $ throwError ([fromEno eINVAL], SomeError $ "lacking value of key " ++ show x)
+    dictDispatch' d env (x:v:xs) = do
+      k <- expand env x
+      dictDispatch' (H.insert k v d) env xs
+  
 normalDispatch :: Env -> [Val] -> Eval Env
 normalDispatch env [] = return env
 normalDispatch env (Prim _ fn _:args) = fn env args
@@ -1097,19 +1147,19 @@ normalDispatch env (Str r s:args) =
       c <- liftIO $ readIORef x
       case c of
         Cache i fn | i == (funID env) -> normalDispatch env (fn:args)
-        NoFunc -> mapM (expand env) args >>= \ys-> liftIO $ cmdExec s ys env
+        NoFunc i | i == (funID env) -> mapM (expand env) args >>= \ys-> liftIO $ cmdExec s ys env
         _ -> do
            funcs <- liftIO $ readIORef $ funcs env
-           case M.lookup s funcs of
+           case H.lookup s funcs of
              Just fn -> do
                liftIO $ writeIORef x $ Cache (funID env) fn
                normalDispatch env (fn:args)
              _ -> do
-               liftIO $ writeIORef x NoFunc
+               liftIO $ writeIORef x $ NoFunc (funID env)
                mapM (expand env) args >>= \ys-> liftIO $ cmdExec s ys env 
     _ -> do 
       funcs <- liftIO $ readIORef $ funcs env
-      case M.lookup s funcs of
+      case H.lookup s funcs of
         Just fn -> normalDispatch env (fn:args)
         _ -> mapM (expand env) args >>= \ys-> liftIO $ cmdExec s ys env 
 normalDispatch env (x:args) = do
@@ -1128,14 +1178,14 @@ pureDispatch env (Str r s:args) = do
         Cache i fn | i == (funID env) -> pureDispatch env (fn:args)
         _ -> do
            funcs <- liftIO $ readIORef $ funcs env
-           case M.lookup s funcs of
+           case H.lookup s funcs of
              Just fn -> do
                liftIO $ writeIORef x $ Cache (funID env) fn
                pureDispatch env (fn:args)
              _ -> Eval $ throwError ([fromEno eINVAL], SomeError "not a pure function")
     _ -> do 
       funcs <- liftIO $ readIORef $ funcs env
-      case M.lookup s funcs of
+      case H.lookup s funcs of
         Just fn -> pureDispatch env (fn:args)
         _ -> Eval $ throwError ([fromEno eINVAL], SomeError "not a pure function")
 pureDispatch _ _ = Eval $ throwError ([fromEno eINVAL], SomeError "not a pure function")
@@ -1179,7 +1229,7 @@ cmdExec c cs env = (do
                    { std_in    = UseHandle $ inn env,
                      std_out   = UseHandle $ out env,
                      std_err   = UseHandle $ err env,
-                     close_fds = True,
+                     close_fds = False,
                      cwd       = Just $ dir env }
     ecode <- waitForProcess h
     case ecode of
@@ -1210,7 +1260,7 @@ wordlist env = do
   p <- getEnv "PATH"
   c <- mapM (\x -> listDirectory x `catchError` (\e->return [])) $ S.splitOn ":" p
   funcs <- readIORef $ funcs env
-  return $ nub $ concat c ++ map T.unpack (M.keys funcs)
+  return $ nub $ concat c ++ map T.unpack (H.keys funcs)
 
 unquotedCompleteFn :: Env -> CompletionFunc IO
 unquotedCompleteFn env line@(left,_)
@@ -1365,14 +1415,14 @@ signalHandleClear :: IO [Handler]
 signalHandleClear =
   mapM (\x -> installHandler x Default Nothing)
     $ filter (\x -> not $ x == 0 || x == 9 || x == 19 || not (inSignalSet x fullSignalSet))
-    $ M.elems signalMap
+    $ H.elems signalMap
 
 signalHandleRestore :: [Handler] -> IO [Handler]
 signalHandleRestore h =
   mapM (\(x, y)-> installHandler y x Nothing)
     $ zip h
     $ filter (\x -> not $ x == 0 || x == 9 || x == 19 || not (inSignalSet x fullSignalSet))
-    $ M.elems signalMap
+    $ H.elems signalMap
 
 options = [ Option ['c'] ["command"] (ReqArg id "COMMAND...") "command line" ]
 
@@ -1420,10 +1470,11 @@ main = do
 genEval :: Parser (Env -> Eval Env)
 genEval = do
   b <- get
+  modify $ \y->y{allocCount=0{-, varCount=0, lexDepth=lexDepth b+1-}}
   x <- makeExprParser genCmd table
   chkParseErr
   c <- allocCount <$> get
-  modify $ \y->y{allocCount=allocCount b}
+  modify $ \y->y{allocCount=allocCount b{-, varCount=varCount b, lexDepth=lexDepth b-1-}}
   if c > 0 then return $ genFuncSpace x
            else return x
   where
@@ -1440,7 +1491,7 @@ genEval = do
               , binary (string "&&") evalIf
               , binary (string "||") evalElse
               , newLine ] ]
-    newLine = InfixL (genNL <$ try (some (symbol spaces "\n" <|> symbol spaces ";")))
+    newLine = InfixL (genNL <$ try (some (lineComment <|> symbol spaces "\n" <|> symbol spaces ";")))
     binary name f = InfixL (f <$ try (andBrank name))
     prefix name f = Prefix (f <$ try (andBrank name))
     parseDoller :: T.Text -> Parser T.Text
@@ -1509,7 +1560,7 @@ genNL f g e = f e >>= g
 genCmd :: Parser (Env -> Eval Env)
 genCmd = do s <- get
             put $ s{addArg=Nothing}
-            (rds, cmd) <- partition isRd <$> many (andSpace $ parseWord "" <|> parseRedirect)
+            (rds, cmd) <- partition isRd <$> many (andSpace $ parseWord "" <|> try parseRedirect)
             case addArg s of
               Nothing -> genRd rds <$> genCmd' cmd
               Just v -> genRd rds <$> genCmd' (cmd ++ [v])
@@ -1527,6 +1578,7 @@ genCmd' (c@(Lambda Expand _ _ _):cs) = return $ \e -> do renv <- evalFn e c []
                                                          boolDispatch renv (status renv) [] cs
 genCmd' (c@Lambda{}:cs) = return $ \e -> valExpand e cs >>= evalFn e c
 genCmd' (Str _ "let":cs) = return $ \e -> valExpand e cs >>= set e 
+genCmd' (Str _ "letr":cs) = return $ \e -> valExpand e cs >>= setRet e 
 genCmd' (Str _ "def":cs) = do incAllocCount
                               case cs of
                                 Str _ name:Lambda Purely _ _ _:_ -> setPureFn name
@@ -1538,7 +1590,7 @@ genCmd' (Str _ "def":cs) = do incAllocCount
                               return $ \e -> valExpand e cs >>= def e
 genCmd' (Str _ "load":cs) = do incAllocCount 
                                return $ \e -> valExpand e cs >>= load e
-genCmd' xs@(Str _ s:cs) = case M.lookup s defaultFuncs of
+genCmd' xs@(Str _ s:cs) = case H.lookup s defaultFuncs of
                             Just (Prim _ f _) -> return $ \e -> valExpand e cs >>= f e
                             _ -> return $ eval xs
 genCmd' xs = return $ eval xs
@@ -1556,7 +1608,7 @@ genExpr' [x] = return $ \e->do y <- valExpand e [x]
                                          "expect single value but " ++ show x ++ " is empty")
                                  Bool b:_ -> return e{status=b, ret=y}
                                  _ -> return e{status=True, ret=y}
-genExpr' xs@(Str _ s:cs) = case M.lookup s defaultFuncs of
+genExpr' xs@(Str _ s:cs) = case H.lookup s defaultFuncs of
                            Just (Prim x f _) -> do if x == Purely || x == Expand
                                                      then return ()
                                                      else notPureFunc s
@@ -1593,6 +1645,11 @@ parseWord b = do
   return $ case xs of
     [y] -> y
     _ -> LinkedStr xs
+
+lineComment :: Parser T.Text
+lineComment = comment >> symbol spaces "\n"
+
+comment = char '#' >> skipMany (notChar '\n')
 
 parseDoller :: Parser Val
 parseDoller = try $ do
@@ -1640,6 +1697,8 @@ parseClsr = do
   <|> between (symbol brank "@{") (string "}" <?> "brace")       (genLambda Normal genEval)
   <|> between (symbol brank "(") (string ")" <?> "parentheses")  (genLambda Expand genExpr)
   <|> between (symbol brank "@(") (string ")" <?> "parentheses") (genLambda Purely genExpr)
+  <|> between (symbol brank "<{") (string "}" <?> "brace")       (genLambda PipeRd genEval)
+  <|> between (symbol brank ">{") (string "}" <?> "brace")       (genLambda PipeWt genEval)
   <|> try (do string "@"
               x <- parseSym "^-+*/%=~"
               optional $ char '^'
@@ -1661,7 +1720,7 @@ parseList = List <$> between (symbol brank "[") (string "]" <?> "square bracket"
 
 parseSym :: String -> Parser Val
 parseSym b = do
-  t <- T.pack <$> some (noneOf (" \\\t\n;|&'\"`<>$)}[]" ++ b) <|> escape)
+  t <- T.pack <$> some (noneOf ("# \\\t\n;|&'\"`<>$)}[]" ++ b) <|> escape)
   ref <- liftIO $ newIORef NoCache
   return $ Str (Just ref) t
   where
@@ -1753,7 +1812,7 @@ genExpr = try (makeExprParser (--parens genExpr
     postfix name f = Postfix (f <$ try (symbol brank name))
 
 brank :: Parser ()
-brank = skipMany (oneOf (" \t\n"::String))
+brank = skipMany (skipSome (oneOf (" \t\n"::String)) <|> comment)
 
 andBrank :: Parser a -> Parser a
 andBrank x = x >>= \y-> brank >> return y
