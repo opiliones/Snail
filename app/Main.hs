@@ -149,6 +149,7 @@ defaultFuncs = H.fromList [
   ("setenv", Prim Normal setenv  ["NAME STRING"]),
   ("map"   , Prim Normal map'    ["[-br] COMMAND [ARG]... LIST"]),
   ("fold"  , Prim Normal fold'   ["[-br] COMMAND [ARG]... VALUE LIST"]),
+  ("filter", Prim Normal filter' ["COMMAND [ARG]... VALUE LIST"]),
   ("len"   , Prim Purely len'    ["VALUE..."]),
   ("lenc"  , Prim Purely lenc    ["VALUE..."]),
   ("idx"   , Prim Purely idx     ["NUMBER [NUMBER] LIST"]),
@@ -297,9 +298,13 @@ check env (x:xs) = do
     getOptList "" = []
     getOptList opt = let (o, t, _) = optHead [] opt in o:getOptList t
 
+usage env [] = do
+  liftIO $ hPutStrLn (out env) "usage command shows the usage of following built-in commands."
+  liftIO $ mapM (TIO.hPutStrLn (out env)) $ sort $ H.keys defaultFuncs
+  return env{status=True, ret=[]}
 usage env [x] = do
   n <- expand env x
-  liftIO $ hPutStrLn (err env) (usageShow n)
+  liftIO $ hPutStrLn (out env) (usageShow n)
   return env{status=True, ret=[]}
 usage env xs = Eval $ throwError ([fromEno eINVAL], NumArgs "1" $ length xs)
 
@@ -700,6 +705,14 @@ fold'' t bopt ropt env xs = let (o, s, ys) = optHead xs t in
       if not bopt || status y
         then foldM' bopt ropt f y xs
         else return y
+
+filter' env xs@(_:_:_) = let l = last xs in
+  case l of
+    List l -> do
+      vs <- filterM (\x-> status <$> eval (init xs ++ [x]) env) l
+      return env{ret=vs, status=null vs}
+    _ -> usagePrint "filter"
+filter' env _ = usagePrint "filter"
 
 len' env xs = return env{status=True, ret=map (toFloat . olen) xs}
   where
