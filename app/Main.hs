@@ -66,6 +66,7 @@ data Env = Env { status :: Bool,
                  flags  :: Flags,
                  parenv :: ParseEnv,
                  funID  :: Int,
+                 jumpID :: Int,
                  dir    :: String,
                  funcs  :: IORef (H.HashMap T.Text Val),
                  thread :: IORef ThreadInfo,
@@ -91,12 +92,13 @@ defaultEnv =
       (Flags False False)
       defaultParseEnv
       0
+      0
 
-incFunID :: Env -> Eval Env
-incFunID env = do
+getID :: Env -> Eval Int
+getID env = do
   i <- liftIO $ (1+) <$> readIORef (idSrc env)
   liftIO $ writeIORef (idSrc env) i
-  return env{funID=i}
+  return i
 
 data Flags = Flags { interactiveMode        :: Bool,
                      ignoreInterpreterError :: Bool }
@@ -105,7 +107,7 @@ data Flags = Flags { interactiveMode        :: Bool,
 data ThreadInfo = ThreadInfo { tid      :: ThreadId,
                                exitMvar :: MVar Env,
                                cmdMvar  :: Maybe (MVar ()),
-                               exitTrap :: Val
+                               exitTrap :: [Val]
                                }
 
 defaultVars :: H.HashMap T.Text Val
@@ -125,7 +127,7 @@ defaultFuncs = H.fromList [
   (":"     , Prim Purely colon   ["VALUE..."]),
   ("false" , Prim Purely false   ["[VALUE]..."]),
   ("exit"  , Prim Normal exit'   ["[NUMBER]..."]),
-  ("break" , Prim Normal break'  ["[VALUE]..."]),
+  ("break" , Prim Normal jump    ["[VALUE]..."]),
 --  ("breakT", Prim Normal breakT  ["[VALUE]..."]),
 --  ("breakF", Prim Normal breakF  ["[VALUE]..."]),
   ("let"   , Prim Normal unavail ["NAME... VALUE"]),
@@ -135,7 +137,7 @@ defaultFuncs = H.fromList [
   ("cd"    , Prim Normal cd      ["[DIR]"]),
   ("usage" , Prim Normal usage   ["NAME"]),
   ("load"  , Prim Normal unavail ["FILE"]),
-  ("loop"  , Prim Normal loop    ["COMMAND [ARG]..."]),
+  ("loop"  , Prim Normal unavail ["COMMAND [ARG]..."]),
   ("bool"  , Prim Purely bool    ["COMMAND [ARG]..."]),
   ("ubool" , Prim Purely ubool   ["COMMAND [ARG]..."]),
   ("read"  , Prim Normal read'   ["[-i] [-n COUNT]"]),
@@ -164,7 +166,7 @@ defaultFuncs = H.fromList [
   ("fork"  , Prim Normal fork    ["COMMAND [ARG]..."]),
   ("tmpf"  , Prim Normal tmpfile ["[-d DIR] [-p PREFIX] COMMAND"]),
   ("tmpd"  , Prim Normal tmpdir  ["[-d DIR] [-p PREFIX] COMMAND"]),
-  ("keep"  , Prim Normal keep'   ["COMMAND [ARG]..."])
+  ("catch" , Prim Normal unavail ["COMMAND [ARG]..."])
   ]
 
 usagePrint name = Eval $ throwError ([], SomeError $ usageShow name)
@@ -386,9 +388,7 @@ exit' env (x:_) = do
     _ | n > 0 -> Eval $ throwError ([Float n], Exited False)
       | otherwise -> Eval $ throwError ([fromEno eINVAL], SomeError $ show n ++ " is not natural number")
 
-break' env xs  = Eval $ throwError (xs, Broken (status env))
-breakT env xs  = Eval $ throwError (xs, Broken True)
-breakF env xs  = Eval $ throwError (xs, Broken False)
+jump env _ = Eval $ throwError (ret env, Jump (status env) (jumpID env))
 
 echo env xs = do
   x <- mapM (expand env) xs
@@ -513,8 +513,8 @@ def' :: Env -> T.Text -> Val -> Eval Env
 def' env name body = do
   fs <- liftIO $ readIORef $ funcs env
   liftIO $ writeIORef (funcs env) $ H.insert name body fs
-  renv <- incFunID env
-  return renv{status=True, ret=[]}
+  i <- getID env
+  return env{status=True, ret=[], funID=i}
 
 optHead :: [Val] -> T.Text -> (T.Text, T.Text, [Val])
 optHead xs t | t /= "" = (T.take 1 t, T.tail t, xs)
@@ -609,10 +609,11 @@ fork env xs = do
   liftIO $ E.mask_ $ do
     hs <- signalHandleClear
     pid <- P.forkProcessWithUnmask $ \m -> do
+      signalHandleClear
       P.getProcessID >>= P.createProcessGroupFor
       tinfo <- allocThreadInfo
       runEvalMain env{thread=tinfo} (eval xs env{thread=tinfo}) >>= exitEval
-    signalHandleRestore hs
+--    signalHandleRestore hs
     return env {status=True, ret=[]}
 
 timeo env ys@(x:xs) = do
@@ -626,8 +627,8 @@ timeo env ys@(x:xs) = do
       Just (Left e)     -> Eval $ throwError e
       Nothing           -> return env{status=False, ret=[]}
 
-keep' env xs = do
-  x <- liftIO $ runEvalKeep env $ eval xs env
+land env i xs = do
+  x <- liftIO $ runEvalJump env i $ eval xs env{jumpID=i}
   case x of
     Right renv -> return renv
     Left e     -> Eval $ throwError e
@@ -736,9 +737,9 @@ setenv env xs@[_, _] = do
   return env{status=True, ret=[toStr $ T.pack v]}
 setenv env x = Eval $ throwError ([fromEno eINVAL], NumArgs "2" $ length x)
 
-loop env (Str _ "-n":x) = loop' env x
-loop env x = do
-  y <- liftIO $ runEvalKeep env $ loop' env x
+loop env i (Str _ "-n":x) = loop' env x
+loop env i x = do
+  y <- liftIO $ runEvalJump env i $ loop' env{jumpID=i} x
   case y of
     Right renv -> return $ setRetEnv env renv
     Left e     -> Eval $ throwError e
@@ -746,11 +747,14 @@ loop env x = do
 loop' env x@(cmd:arg) = do
   y <- liftIO $ runEvalFunc env $ eval x env
   case y of
-    Right renv -> loop env (cmd:ret renv)
+    Right renv -> loop' env (cmd:ret renv)
     Left e     -> Eval $ throwError e
 
 trap env [] = usagePrint "trap"
-trap env (f:ys) = do
+trap env (Str _ "-a":ys) = trap' True env ys
+trap env ys = trap' False env ys
+
+trap' aopt env (f:ys) = do
   singnals <- case ys of
                 [] -> return defaultSignal
                 _  -> mapM txSignal ys
@@ -763,11 +767,19 @@ trap env (f:ys) = do
         writeIORef (thread env) tinfo{cmdMvar=Just mvar}
 
   liftIO $ mapM (
-             \x -> case x of
-                     0 -> do tinfo <- readIORef (thread env)
-                             writeIORef (thread env) tinfo{exitTrap=f}
-                     _ -> do installHandler x (Catch $ trapHandler env f) Nothing
-                             return ()
+             \x -> if aopt then
+                     case x of
+                       0 -> do tinfo <- readIORef (thread env)
+                               writeIORef (thread env) tinfo{exitTrap=f:exitTrap tinfo}
+                       _ -> do Catch h <- installHandler x (Catch $ trapHandler env f) Nothing
+                               installHandler x (Catch (h >> trapHandler env f)) Nothing
+                               return ()
+                   else
+                     case x of
+                       0 -> do tinfo <- readIORef (thread env)
+                               writeIORef (thread env) tinfo{exitTrap=[f]}
+                       _ -> do installHandler x (Catch $ trapHandler env f) Nothing
+                               return ()
                  ) singnals
   return env{status=True, ret=[]}
   where
@@ -977,7 +989,7 @@ data LambdaType = Normal
 
 data ShError = Returned     Bool
              | Exited       Bool
-             | Broken       Bool
+             | Jump         Bool Int
              | SomeError    String
              | NumArgs      String Int
              | TypeMismatch String Val
@@ -1275,7 +1287,7 @@ genFuncEnv env penv Nothing =
   return env{status=True, parenv=penv}
 genFuncEnv env penv (Just fenv) =
 --  rfs <- liftIO $ readIORef (funcs fenv) >>= newIORef
-  return env{status=True, ret=ret fenv, vars=vars fenv, funcs=funcs fenv, parenv=penv}
+  return env{status=True, ret=ret fenv, vars=vars fenv, funcs=funcs fenv, parenv=penv, jumpID=jumpID fenv}
 
 genFuncSpace :: (Env -> Eval Env) -> Env -> Eval Env
 genFuncSpace f env = do
@@ -1419,7 +1431,7 @@ runEval env (Eval fn) = runExceptT $ catchError fn $ handler env
   where
     handler :: Env -> ([Val], ShError) -> ExceptT ([Val], ShError) IO Env
     handler env e@(v, Returned s) = throwError e
-    handler env e@(v, Broken s)   = throwError e
+    handler env e@(v, Jump{})     = throwError e
     handler env e@(v, Exited s)   = throwError e
     handler env e                 = ignoreError env e
 
@@ -1428,7 +1440,7 @@ runEvalTry env (Eval fn) = runExceptT $ catchError fn $ handler env
   where
     handler :: Env -> ([Val], ShError) -> ExceptT ([Val], ShError) IO Env
     handler env e@(v, Returned s) = throwError e
-    handler env e@(v, Broken s)   = throwError e
+    handler env e@(v, Jump{})     = throwError e
     handler env e@(v, Exited s)   = throwError e
     handler env (v, e) = return env{status=False, ret=v}
 
@@ -1437,16 +1449,17 @@ runEvalFunc env (Eval fn) = runExceptT $ catchError fn $ handler env
   where
     handler :: Env -> ([Val], ShError) -> ExceptT ([Val], ShError) IO Env
     handler env (v, Returned s) = return env{status=s, ret=v}
-    handler env e@(v, Broken s) = throwError e
+    handler env e@(v, Jump{})   = throwError e
     handler env e@(v, Exited s) = throwError e
     handler env e               = ignoreError env e
 
-runEvalKeep :: Env -> Eval Env -> IO (Either ([Val], ShError) Env)
-runEvalKeep env (Eval fn) = runExceptT $ catchError fn $ handler env
+runEvalJump :: Env -> Int -> Eval Env -> IO (Either ([Val], ShError) Env)
+runEvalJump env id (Eval fn) = runExceptT $ catchError fn $ handler env
   where
     handler :: Env -> ([Val], ShError) -> ExceptT ([Val], ShError) IO Env
     handler env e@(v, Returned s) = throwError e
-    handler env (v, Broken s)     = return env{status=s, ret=v}
+    handler env e@(v, Jump s i)   = if i == id then return env{status=s, ret=v}
+                                               else throwError e
     handler env e@(v, Exited s)   = throwError e
     handler env e                 = ignoreError env e
 
@@ -1462,7 +1475,7 @@ runEvalMain env (Eval fn) = do
   where
     handler :: Env -> ([Val], ShError) -> ExceptT ([Val], ShError) IO Env
     handler env (v, Returned s) = return env{status=s, ret=v}
-    handler env (v, Broken s) = return env{status=s, ret=v}
+    handler env (v, Jump s _) = return env{status=s, ret=v}
     handler env (v, Exited s) = return env{status=s, ret=v}
     handler env (v, e) = liftIO (hPrint (err env) e) >> return env{status=False, ret=v}
 
@@ -1478,7 +1491,7 @@ allocThreadInfo :: IO (IORef ThreadInfo)
 allocThreadInfo = do
   tid <- myThreadId
   exitMvar <- newEmptyMVar
-  newIORef $ ThreadInfo tid exitMvar Nothing (Lambda NoArgs defaultParseEnv Nothing return)
+  newIORef $ ThreadInfo tid exitMvar Nothing []
 
 signalHandleClear :: IO [Handler]
 signalHandleClear =
@@ -1498,7 +1511,9 @@ options = [ Option ['c'] ["command"] (ReqArg id "COMMAND...") "command line" ]
 trapExit :: Env -> IO Env
 trapExit env = do
   tinfo <- readIORef $ thread env
-  runEvalMain env $ eval (exitTrap tinfo:ret env) env
+  res <- mapM (\h->runEvalMain env $ eval (h:ret env) env) $ exitTrap tinfo
+  if null res then return env
+              else return $ last res
 
 exitEval :: Env -> IO ()
 exitEval env = do
@@ -1649,7 +1664,13 @@ evalIf f g e = do
   if status re then setRetEnv re <$> g re
                else return re
 
-evalElse f = evalIf (not'' f)
+evalElse f g e = do
+  x <- liftIO $ runEvalTry e $ f e
+  re <- case x of
+    Right re -> return re
+    Left e -> Eval $ throwError e
+  if status re then return re
+               else setRetEnv re <$> g re
 
 genNL f g e = f e >>= g
 
@@ -1684,9 +1705,10 @@ genCmd' (Str _ "def":cs) = do incAllocCount
                               return $ \e -> valExpand e cs >>= def e
 genCmd' (Str _ "load":cs) = do incAllocCount 
                                return $ \e -> valExpand e cs >>= load e
-genCmd' xs@(Str _ s:cs) = case H.lookup s defaultFuncs of
-                            Just (Prim _ f _) -> return $ \e -> valExpand e cs >>= f e
-                            _ -> return $ eval xs
+genCmd' (Str _ "catch":cs) = return $ \e -> do i <- getID e
+                                               valExpand e{jumpID=i} cs >>= land e i
+genCmd' (Str _ "loop":cs) = return $ \e -> do i <- getID e
+                                              valExpand e{jumpID=i} cs >>= loop e i
 genCmd' xs = return $ eval xs
 
 genExpr' :: [Val] -> Parser (Env -> Eval Env)
@@ -1898,8 +1920,8 @@ genExpr = try (makeExprParser (--parens genExpr
             , [ binary  "==" eq'
               , binary  "="  same'
               , binary  "~"  match' ]
-            , [ binary  "&&" and'
-              , binary  "||" or' ] ]
+            , [ binary  "&&" evalIf
+              , binary  "||" evalElse ] ]
     binary  name f = InfixL  (f <$ try (symbol brank name))
     prefix  name f = Prefix  (f <$ try (symbol brank name))
     postfix name f = Postfix (f <$ try (symbol brank name))
@@ -1991,8 +2013,8 @@ le' = setBinNB (<=)
 gt' = setBinNB (>)
 ge' = setBinNB (>=)
 eq' = setBinVB (==)
-and' = setBinBB (&&)
-or' = setBinBB (||)
+--and' = setBinBB (&&)
+--or' = setBinBB (||)
 
 same' :: (Env -> Eval Env) -> (Env -> Eval Env) -> Env -> Eval Env
 same' x y e = do
