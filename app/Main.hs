@@ -146,6 +146,7 @@ defaultFuncs = H.fromList [
   ("show"  , Prim Normal show'   ["VALUE..."]),
   ("glob"  , Prim Normal glob    ["[-f] EXPRESSION..."]),
   ("sep"   , Prim Purely split   ["[SEPARATOR] STRING"]),
+  ("usep"  , Prim Purely usplit  ["[SEPARATOR] STRING"]),
   ("sub"   , Prim Purely sub     ["REGEXP REPLACEMENT STRING"]),
   ("getenv", Prim Normal getenv  ["NAME"]),
   ("setenv", Prim Normal setenv  ["NAME STRING"]),
@@ -603,7 +604,16 @@ split env [z, x] = do
 split env [x] = do
   t <- expand env x
   return env{status=True, ret=map toStr $ T.words t}
-split env _ = usagePrint "split"
+split env _ = usagePrint "sep"
+
+usplit env [z, List x] = do
+  s <- expand env z
+  z <- mapM (expand env) x
+  return env{status=True, ret=[toStr $ T.intercalate s z]}
+usplit env [List x] = do
+  z <- mapM (expand env) x
+  return env{status=True, ret=[toStr $ T.unwords z]}
+usplit env _ = usagePrint "usep"
 
 fork env xs = do
   liftIO $ E.mask_ $ do
@@ -1580,6 +1590,8 @@ genEval = do
               , binary (string "&" >> notFollowedBy "&") para
               , binary (string "&&") evalIf
               , binary (string "||") evalElse
+              , binary (string "!!") evalNull
+              , binary (string "|!") evalElseNull
               , newLine ] ]
     newLine = InfixL (genNL <$ try (some (lineComment <|> symbol spaces "\n" <|> symbol spaces ";")))
     binary name f = InfixL (f <$ try (andBrank name))
@@ -1671,6 +1683,26 @@ evalElse f g e = do
     Left e -> Eval $ throwError e
   if status re then return re
                else setRetEnv re <$> g re
+
+evalNull f g e = do
+  x <- liftIO $ runEvalTry e $ f e
+  re <- case x of
+    Right re -> return re
+    Left e -> Eval $ throwError e
+  if null $ ret re then setRetEnv re <$> g re
+                   else return re
+
+evalElseNull f g e = do
+  x <- liftIO $ runEvalTry e $ f e
+  re <- case x of
+    Right re -> return re
+    Left e -> Eval $ throwError e
+  if null $ ret re then
+    setRetEnv re <$> g re
+  else if status re then
+    return re
+  else
+    setRetEnv re <$> g re
 
 genNL f g e = f e >>= g
 
@@ -1921,7 +1953,9 @@ genExpr = try (makeExprParser (--parens genExpr
               , binary  "="  same'
               , binary  "~"  match' ]
             , [ binary  "&&" evalIf
-              , binary  "||" evalElse ] ]
+              , binary  "||" evalElse
+              , binary  "!!" evalNull
+              , binary  "|!" evalElseNull ] ]
     binary  name f = InfixL  (f <$ try (symbol brank name))
     prefix  name f = Prefix  (f <$ try (symbol brank name))
     postfix name f = Postfix (f <$ try (symbol brank name))
