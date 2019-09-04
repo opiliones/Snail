@@ -71,7 +71,7 @@ To mix the concept of functional programing, several changes have been added.
   b
   ```
   
-### Different syntax from both
+### Different syntax from sh and rc shell
 　　
 * Redirection with copying fd
   ```
