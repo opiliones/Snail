@@ -12,7 +12,7 @@ There are several new syntax to import the concept of functional programing.
 * Pipeline using return values
 * Immutable data structure
 
-## Comparison with sh
+## Comparison with sh and rc shell
 ### Same syntax as sh or rc shell
 
 * Execution of command or function
