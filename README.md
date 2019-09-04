@@ -2,7 +2,7 @@
 
 SnailScript is a programing language similar to shell script.
 The base syntax is taken from sh or rc shell.
-To mix the concept of functional programing, several changes have been added. 
+There are several new syntax to import the concept of functional programing. 
 
 ## Features of SnailScript
 
