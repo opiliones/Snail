@@ -180,13 +180,10 @@ There are several new syntax to import the concept of functional programing.
 
 
 ## Built-in functions
-* echo
 * print
-* cd
 * true
 * false
 * :
-* exit
 * loop
 * break
 * catch
@@ -214,7 +211,6 @@ There are several new syntax to import the concept of functional programing.
   ```
 * map
 * fold
-* filter
 * len
 * lenc
 * sep
@@ -226,12 +222,5 @@ There are several new syntax to import the concept of functional programing.
 * setenv
 * type
 * int
-* +
 * usage
 
-
-## Combinators
-
-## Combinators in arithmetic expression
-
-## Licence
