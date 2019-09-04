@@ -151,6 +151,34 @@ There are several new syntax to import the concept of functional programing.
     
     ```
 
+* Pipeline with return values
+  - Case: pass all values.
+    ```
+    
+    ```
+    If no value, finish pipeline and do exception process.
+    ```
+    
+    ```
+    If no value or error status, finish pipeline and do exception process.
+    ```
+    
+    ```
+  - Case: pass first values.
+    If no value, finish pipeline and do exception process.
+    ```
+    
+    ```
+    If no value or error status, finish pipeline and do exception process.
+    ```
+    
+    ```
+  - Case: process each value.
+    ```
+    
+    ```
+
+
 ## Built-in functions
 * echo
 * print
