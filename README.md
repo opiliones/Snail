@@ -164,7 +164,7 @@ There are several new syntax to import the concept of functional programing.
     ```
     
     ```
-  - Case: pass first values.
+  - Case: pass first values.  
     If no value, finish pipeline and do exception process.
     ```
     
