@@ -1,10 +1,10 @@
-# What's snail script
+# What's SnailScript
 
-Snail script is a programing language similar to shell script.
+SnailScript is a programing language similar to shell script.
 The base syntax is taken from sh or rc shell.
 To mix the concept of functional programing, several changes have been added. 
 
-## Features of snail script
+## Features of SnailScript
 
 * Lexical scope
 * First-class function
@@ -56,11 +56,19 @@ To mix the concept of functional programing, several changes have been added.
   @ ech a >[2] a
   @ cat - <a
   ech: snale: runInteractiveProcess: exec: does not exist (No such file or directory)
+  @ {echo a; cat - <[1]} > a
   ```
 
 * Non-linear pipe
   ```
-  
+  @ diff <{echo a} <{echo b}
+  1c1
+  < a
+  ---
+  > b
+  @ echo a | tee >{tr a b}
+  a
+  b
   ```
   
 ### Different syntax from both
@@ -84,11 +92,11 @@ To mix the concept of functional programing, several changes have been added.
     ```
     
     ```
-  
   - Re-definition
     ```
     
     ```
+    
   
 * Arithmetic expression
   ```
@@ -100,25 +108,102 @@ To mix the concept of functional programing, several changes have been added.
   
   ```
   
-　関数
-　　定義
-　　戻り値
-　　型
-　　スコープ
-　分岐
-　ループ
-　グロビング
+* Function
+  - Definition
+    ```
+    
+    ```
+  - Return Values
+    ```
+    
+    ```
+  - Type
+    ```
+    
+    ```
 
-その他の仕様
-　データ構造
-　　リスト
-　　連想配列
-　jump
-　　スコープ
-　　多重ループからの脱出
+* Flow-Control Constructs
+  - Conditional branch
+    ```
+    
+    ```
+  - Loop
+    ```
+    
+    ```
+  - Non-local Exits
+    ```
+    
+    ```
+    
+* Globing
+  ```
+  
+  ```
+  
+* Data Stuructures
+  - List
+    ```
+    
+    ```
+  - Associative array
+    ```
+    
+    ```
 
-## Built-in functoins
+## Built-in functions
+* echo
+* print
+* cd
+* true
+* false
+* :
+* exit
+* loop
+* break
+* catch
+* trap
+* let
+* letr
+* def
+* load
+* tmpf
+* tmpd
+* check
+* read
+* glob
+* shift
+* bool
+* ubool
+* list
+* ulist
+* dict
+
+  - Type
+  
+  ```
+ 
+  ```
+* map
+* fold
+* filter
+* len
+* lenc
+* sep
+* usep
+* sub
+* timeo
+* fork
+* getenv
+* setenv
+* type
+* int
+* +
+* usage
+
 
 ## Combinators
 
 ## Combinators in arithmetic expression
+
+## Licence
