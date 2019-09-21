@@ -95,7 +95,7 @@ There are several new syntax to import the concept of functional programing.
   Single, double, back quotes have same meaning.
 
 ### Different syntax from sh and rc shell
-　　
+
 * Redirection with copying fd
   ```
   @ {echo a; ech} >[2=1] a
