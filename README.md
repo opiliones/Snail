@@ -183,7 +183,7 @@ There are several new syntax to import the concept of functional programing.
     ```
   - Type  
     There are only two type in function.
-    - Pure function
+    - Pure function  
       It is defined by arithmetic expression or constant.
       Pure function can be used in arithmetic expression.
       ```
@@ -199,7 +199,7 @@ There are several new syntax to import the concept of functional programing.
       @ echo @cont
       hoge
       ```
-    - Non pure function
+    - Non pure function  
       It is defined by brace.
       It can not be used in arithmetic expression.
       
