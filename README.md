@@ -163,7 +163,7 @@ There are several new syntax to import the concept of functional programing.
   a
   @ (ab~[aA]) && echo $?
   a
-  @ ([a b c]~[a b c]) && echo $@
+  @ ([a b c]~[a b c]) && echo $@?
   a b c
   ```
 * Command substitution  
@@ -219,6 +219,13 @@ There are several new syntax to import the concept of functional programing.
     @ {(a==b) ||| echo b; echo a}
     b
     ```
+    When arguments are passed to arithmetic expression (not having "@"),
+    it works like ternary operator.
+    ```
+    @ (! a==a) a b
+    @ echo $?
+    b
+    ``` 
   - Loop
     ```
     @ loop @{($1>=5) >>> break; echo $1; ($1+1)} 1
@@ -229,51 +236,87 @@ There are several new syntax to import the concept of functional programing.
     ```
   - Non-local Exits
     ```
-    
+    @ catch {
+        let break {break}
+        loop {
+          echo a
+          catch {$break}
+        }
+        echo b
+      }
+    a
     ```
     
 * Globing
   ```
-  
+  @ mkdir tmp; cd tmp; touch a b c
+  @ glob *
+  @ echo $@?
+  a b c
   ```
   
 * Data Stuructures
   - List
     ```
-    
+    @ [1 2 3 4] 1; echo $?
+    1
+    @ [1 2 3 4] -2 -1; echo $@?
+    3 4
     ```
   - Associative array
     ```
-    
+    @ {dict a 1 b 2 c 3} a; echo $?
+    1
+    @ {dict a 1 b 2 c 3} b c; echo $?
+    b 2 c 3
     ```
-
+    
 * Pipeline with return values
   - Case: pass all values.
     ```
-    
+    @ : 1 2 3 $> echo
+    1 2 3
     ```
     If no value, finish pipeline and do exception process.
     ```
-    
+    @ : 1 2 3 $$ echo !! echo b 
+    1 2 3
+    @ : $$ echo !! echo b
+    b
     ```
     If no value or error status, finish pipeline and do exception process.
     ```
-    
+    @ true 1 2 3 && $$ echo |! echo b
+    1 2 3
+    @ false 1 2 3 && $$ echo |! echo b
+    b
+    @ true && $$ echo |! echo b
+    b
     ```
   - Case: pass first values.  
     If no value, finish pipeline and do exception process.
     ```
-    
+    @ : 1 2 3 $ echo !! echo b
+    1
+    @ : $ echo !! echo b
+    b
     ```
     If no value or error status, finish pipeline and do exception process.
     ```
-    
+    @ true 1 2 3 $& echo |! echo b
+    1
+    @ false 1 2 3 $& echo |! echo b
+    b
+    @ true $& echo |! echo b
+    b
     ```
   - Case: process each value.
     ```
-    
+    @ : 1 2 3 $: echo
+    1
+    2
+    3
     ```
-
 
 ## Built-in functions
 * print
