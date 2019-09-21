@@ -284,6 +284,12 @@ There are several new syntax to import the concept of functional programing.
     @ {dict a 1 b 2 c 3} b c; echo $?
     b 2 c 3
     ```
+  - Chaining process using the data Stuructures
+    ```
+    @ [[1 2] 3] 1 $. 2 $ echo
+    2
+    @ 
+    ```
     
 * Pipeline with return values
   - Case: pass all values.
