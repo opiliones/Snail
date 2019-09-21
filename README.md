@@ -69,7 +69,6 @@ There are several new syntax to import the concept of functional programing.
   @ ech a >[2] a
   @ cat - <a
   ech: snale: runInteractiveProcess: exec: does not exist (No such file or directory)
-  @ {echo a; cat - <[1]} > a
   ```
 
 * Non-linear pipe
