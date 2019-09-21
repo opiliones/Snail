@@ -346,7 +346,7 @@ There are several new syntax to import the concept of functional programing.
 * false
   ``` 
   @ false 1 2 3 && echo T $@? || echo F $@?
-  F 1 2 3
+  F 1 2 3
   ```
 * :
   ```
@@ -447,7 +447,7 @@ There are several new syntax to import the concept of functional programing.
 * lenc  
   This command returns the length of string.
 * sep  
-  This commnad same as split in other languege.
+  This commnad is same as split in other languege.
 * usep
   ```
   @ usep [1 2 3] $ echo
