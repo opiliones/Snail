@@ -181,9 +181,11 @@ There are several new syntax to import the concept of functional programing.
   Snale does not have command substitution syntax.
   Instead, read builtin command returns string.
   ```
-  @ echo a | read
+  @ yes | head -n3 | read -a
   @ echo $?
-  a
+  y
+  y
+  y
   ```
   
 * Function
@@ -193,6 +195,7 @@ There are several new syntax to import the concept of functional programing.
     @ def func2 @($1+$2)
     @ def cont hoge
     ```
+    In script (not interactive), multiple definition is not available. 
   - Return Values
     ```
     @ def multi-values @{: $@}
@@ -331,39 +334,127 @@ There are several new syntax to import the concept of functional programing.
 
 ## Built-in functions
 * print
+  ```
+  @ print a
+  a@
+  ```
 * true
+  ```
+  @ true 1 2 3 && echo T $@? || echo F $@?
+  T 1 2 3
+  ```
 * false
+  ``` 
+  @ false 1 2 3 && echo T $@? || echo F $@?
+  F 1 2 3
+  ```
 * :
-* loop
-* catch
+  ```
+  @ false; : 1 2 3 && echo T $@? || echo F $@?
+  F 1 2 3
+  ```
+* loop  
+  First argument is closure for iteration. Rest arguments are arguments for first iteration.
+  Return values of each iteration are passed to next iteration.
+  Returning closure is meaning "continue" in other languege.
+  When -n option is specified, this command does not catch exit by break command.
+* catch  
+  This command makes tag to jump.
+  break command can be used to Non-local Exits in the closure being passed to this command.
 * trap
+  Unlike sh, this command take closure as signal handler.
+  When -a option is specified, this command add argument closure to existing signal handler.
 * let
+  ```
+  @ let a b 1; echo $a $b
+  1 1
+  @ let [a b] [1 2] && {echo $a; echo $b}
+  1
+  2
+  @ let [a b] 1 && {echo $a} 
+  @
+  ```
 * letr
+  ```
+  @ letr a {: 1 2}; echo $a
+  1
+  @ letr a b {: 1 2}; echo $a; echo $b
+  1
+  2
+  ```
 * def
 * load
+  ```
+  @ cat a
+  def f {echo a}
+  @ load ./a
+  @ f
+  a
+  ```
+  ```
+  @ {load ./a; : @{$@}} $ def name-space
+  @ name-space f
+  a
+  ```
 * tmpf
+  ```
+  @ tmpf @{ls $1; : $1}
+  /tmp/snale2371-1
+  @ ls $?
+  ls: cannot access '/tmp/snale2371-1': No such file or directory
+  ```
 * tmpd
+  ```
+  @ tmpd @{ls -ld $1; : $1}
+  drwx------ 2 root root 4096 Sep 21 23:28 /tmp/snale-146e51aa74ac0b46
+  @ ls $?
+  ls: cannot access '/tmp/snale-146e51aa74ac0b46': No such file or directory
+  ```
 * check
+  This command has file check parts of test command functions.
 * read
-* glob
-* shift
+  Unlike sh, this command does not bind input to variable, but put it to return value.
 * bool
+  ```
+  @ true 1 2 3 $> bool; echo $@?
+  true 1 2 3
+  ```
 * ubool
+  ```
+  @ true 1 2 3 $> bool $> ubool && echo $@?
+  1 2 3
+  ```
 * list
+  ```
+  @ : 1 2 3 $> list $ echo
+  1 2 3
+  ```
 * ulist
+  ```
+  @ : [1 2 3] $ ulist $> echo
+  1 2 3
+  ```
 * dict
-
-  - Type
-  
-  ```
- 
-  ```
 * map
+  ```
+  @ map -n2 echo [1 2 3 4]
+  1 2
+  3 4
+  ```
 * fold
 * len
+  This command returns the length of list. 
 * lenc
+  This command returns the length of string.
 * sep
+  This commnad same as split in other languege.
 * usep
+  ```
+  @ usep [1 2 3] $ echo
+  1 2 3
+  @ usep , [1 2 3] $ echo
+  1,2,3
+  ```
 * sub
 * timeo
 * fork
