@@ -352,7 +352,7 @@ There are several new syntax to import the concept of functional programing.
   ```
   @ false; : 1 2 3 && echo T $@? || echo F $@?
   F 1 2 3
-  ```
+  ```
 * loop  
   First argument is closure for iteration. Rest arguments are arguments for first iteration.
   Return values of each iteration are passed to next iteration.
