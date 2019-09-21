@@ -166,6 +166,18 @@ There are several new syntax to import the concept of functional programing.
   @ ([a b c]~[a b c]) && echo $@?
   a b c
   ```
+  String formatting can be use in arithmetic expansion.
+  ```
+  @ echo (%8s Hello)
+     Hello
+  @ echo (%.2s Hello)
+  He
+  @ echo (%06d 1234)
+  001234
+  @ echo (%6.3f 3.14)
+   3.140
+  ```
+  
 * Command substitution  
   Snale does not have command substitution syntax.
   Instead, read builtin command returns string.
@@ -324,7 +336,6 @@ There are several new syntax to import the concept of functional programing.
 * false
 * :
 * loop
-* break
 * catch
 * trap
 * let
