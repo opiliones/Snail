@@ -361,7 +361,7 @@ There are several new syntax to import the concept of functional programing.
 * catch  
   This command makes tag to jump.
   break command can be used to Non-local Exits in the closure being passed to this command.
-* trap
+* trap  
   Unlike sh, this command take closure as signal handler.
   When -a option is specified, this command add argument closure to existing signal handler.
 * let
@@ -410,9 +410,9 @@ There are several new syntax to import the concept of functional programing.
   @ ls $?
   ls: cannot access '/tmp/snale-146e51aa74ac0b46': No such file or directory
   ```
-* check
+* check  
   This command has file check parts of test command functions.
-* read
+* read  
   Unlike sh, this command does not bind input to variable, but put it to return value.
 * bool
   ```
@@ -442,11 +442,11 @@ There are several new syntax to import the concept of functional programing.
   3 4
   ```
 * fold
-* len
+* len  
   This command returns the length of list. 
-* lenc
+* lenc  
   This command returns the length of string.
-* sep
+* sep  
   This commnad same as split in other languege.
 * usep
   ```
