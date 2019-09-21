@@ -144,7 +144,7 @@ There are several new syntax to import the concept of functional programing.
   2
   ```
   To use positional parameter like functon,
-  "@" have to be add at left paren.
+  "@" has to be add at left paren.
   ```
   @ @($1+$2) 1 1
   @ echo $?
@@ -210,7 +210,7 @@ There are several new syntax to import the concept of functional programing.
       @ echo (func2 1 1)
       2
       ```
-      To referring constant, "@" have to be add in begining of function name.
+      To referring constant, "@" has to be add in begining of function name.
       ```
       @ def cont hoge
       @ (@cont==hoge) && echo a
