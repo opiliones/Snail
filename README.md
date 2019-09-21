@@ -297,7 +297,7 @@ There are several new syntax to import the concept of functional programing.
     If no value, finish pipeline and do exception process.
     ```
     @ : 1 2 3 $ echo !! echo b
-    1
+    1
     @ : $ echo !! echo b
     b
     ```
