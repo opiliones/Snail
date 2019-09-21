@@ -124,7 +124,7 @@ There are several new syntax to import the concept of functional programing.
     @ echo $a
     a
     ```
-  - Scope
+  - Scope  
     Variables in the closure refer the values at the time of the closure creation.
     ```
     @ let a b
@@ -133,7 +133,7 @@ There are several new syntax to import the concept of functional programing.
     @ $f
     b
     ```
-  - Re-definition
+  - Re-definition  
     The value of variable is immutable. So it can not be updated.
     But it can be defined again as another variable.
   
