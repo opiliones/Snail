@@ -157,7 +157,15 @@ There are several new syntax to import the concept of functional programing.
   @ echo (1+1)
   2
   ```
-  
+  String comparison can be use in arithmetic expansion.
+  ```
+  @ (a~a) && echo $?
+  a
+  @ (ab~[aA]) && echo $?
+  a
+  @ ([a b c]~[a b c]) && echo $@
+  a b c
+  ```
 * Command substitution  
   Snale does not have command substitution syntax.
   Instead, read builtin command returns string.
