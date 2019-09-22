@@ -457,7 +457,7 @@ There are several new syntax to import the concept of functional programing.
   @ ls $?
   ls: cannot access '/tmp/snale-146e51aa74ac0b46': No such file or directory
   ```
-* check  
+* chk  
   This command has file check parts of test command functions.
 * read  
   Unlike sh, this command does not bind input to variable, but put it to return value.
