@@ -156,7 +156,7 @@ There are several new syntax to import the concept of functional programing.
   @ echo (1+1)
   2
   ```
-  String comparison can be use in arithmetic expansion.
+  String comparison can be use in arithmetic expression.
   ```
   @ (a~a) && echo $?
   a
@@ -165,7 +165,7 @@ There are several new syntax to import the concept of functional programing.
   @ ([a b c]~[a b c]) && echo $@?
   a b c
   ```
-  String formatting can be use in arithmetic expansion.
+  String formatting can be use in arithmetic expression.
   ```
   @ echo (%8s Hello)
      Hello
