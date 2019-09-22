@@ -570,6 +570,8 @@ There are several new syntax to import the concept of functional programing.
   a
   b
   c
+  @ sep "" "abc" $> echo
+  a b c
   ```
 * usep  
   This command is the opposite of sep command.
