@@ -245,7 +245,7 @@ There are several new syntax to import the concept of functional programing.
     When arguments are passed to arithmetic expression (not having "@"),
     it works like ternary operator.
     ```
-    @ (! a==a) a b
+    @ (a!=a) a b
     @ echo $?
     b
     ``` 
