@@ -1,3 +1,11 @@
+```
+     _____
+   .'     `.
+  /  .-=-.  \   \ __  
+  | (  C\ \  \_.'')   Hello!
+ _\  `--' |,'   _/
+/__`.____.'__.-'
+```
 # What's SnailScript
 
 SnailScript is a programing language similar to shell script.
