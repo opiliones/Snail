@@ -497,6 +497,24 @@ There are several new syntax to import the concept of functional programing.
   @ #[a 1 b 2 c 3] $ udict $> echo
   a 1 b 2 c 3
   ```
+* ins  
+  It inserts values to List or associative array specified to argument.
+  ```
+  @ ins 2 a [1 2 3] $ echo
+  1 a 2 3
+  @ ins aa b #[a 1 b 2 c 3] $ echo
+  a b aa b b 2 c 3
+  @ ins a b #[a 1 b 2 c 3] $ echo
+  a b b 2 c 3
+  ```
+* del  
+  It delete values to List or associative array specified to argument.
+  ```
+  @ del 2 [1 2 3] $ echo
+  1 3
+  @ del a #[a 1 b 2 c 3] $ echo
+  b 2 c 3
+  ```
 * map  
   When -n option is specified, this command passes specified number values to the closure or command.
   When argument closure or command returns multiple values,
@@ -548,35 +566,35 @@ There are several new syntax to import the concept of functional programing.
   @ usep , [1 2 3] $ echo
   1,2,3
   ```
-* sub
+* sub  
   ```
   @ sub "[aA]*" @ snale_SNALE $ echo
   sn@le_SN@LE
   ```
-* timeo
+* timeo  
   It works like timeout command.
   ```
   @ timeo 1 {sleep 2; echo a}
   @
   ```
-* fork
+* fork  
   This command executes argument command or closure in background.
   ```
   @ timeo 1 {fork {sleep 2}; echo a}
   a
   ```
-* getenv
+* getenv  
   This command puts the environment variable specified at the argument to return value.
   ```
   @ getenv LANG $ echo
   C
   ```
-* setenv
+* setenv  
   This command sets the value to the environment variable specified at the argument.
   ```
   @ setenv LANG C
   ```
-* type
+* type  
   It returns type of argument.
   ```
   @ type [] $ echo
