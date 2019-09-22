@@ -279,16 +279,15 @@ There are several new syntax to import the concept of functional programing.
     ```
   - Associative array
     ```
-    @ {dict a 1 b 2 c 3} a; echo $?
+    @ #[a 1 b 2 c 3] a; echo $?
     1
-    @ {dict a 1 b 2 c 3} b c; echo $?
+    @ #[a 1 b 2 c 3] b c; echo $?
     b 2 c 3
     ```
   - Chaining process using the data Stuructures
     ```
     @ [[1 2] 3] 1 $. 2 $ echo
     2
-    @ 
     ```
     
 * Pipeline with return values
@@ -359,6 +358,12 @@ There are several new syntax to import the concept of functional programing.
   @ false; : 1 2 3 && echo T $@? || echo F $@?
   F 1 2 3
   ```
+* ?
+  This command is same as *command $> true*.
+  ```
+  @ ? false 1 2 3 && echo $@?
+  1 2 3
+  ```
 * loop  
   First argument is closure for iteration. Rest arguments are arguments for first iteration.
   Return values of each iteration are passed to next iteration.
@@ -370,6 +375,10 @@ There are several new syntax to import the concept of functional programing.
 * trap  
   Unlike sh, this command take closure as signal handler.
   When -a option is specified, this command add argument closure to existing signal handler.
+  ```
+  @ trap {rm file2} EXIT
+  @ trap -a {rm file2} EXIT
+  ```
 * let
   ```
   @ let a b 1; echo $a $b
@@ -389,6 +398,7 @@ There are several new syntax to import the concept of functional programing.
   2
   ```
 * def
+  This command defines function or constant.
 * load
   ```
   @ cat a
@@ -420,6 +430,19 @@ There are several new syntax to import the concept of functional programing.
   This command has file check parts of test command functions.
 * read  
   Unlike sh, this command does not bind input to variable, but put it to return value.
+  ```
+  @ ? yes | read $ echo
+  y
+  @ ? yes yes | read -n2 $ echo
+  ye
+  @ ? yes | read -n2 $ echo
+  y
+  @ ? yes | read -Nn2 $ echo
+  y
+  
+  @ ? yes yes | read -ss -n3 $ echo
+  ye
+  ```
 * bool
   ```
   @ true 1 2 3 $> bool; echo $@?
@@ -437,10 +460,19 @@ There are several new syntax to import the concept of functional programing.
   ```
 * ulist
   ```
-  @ : [1 2 3] $ ulist $> echo
+  @ [1 2 3] $ ulist $> echo
   1 2 3
   ```
 * dict
+  ```
+  @ : a 1 b 2 c 3 $> dict $.b $ echo
+  2
+  ```
+* udict
+  ```
+  @ #[a 1 b 2 c 3] $ udict $> echo
+  a 1 b 2 c 3
+  ```
 * map
   ```
   @ map -n2 echo [1 2 3 4]
@@ -448,12 +480,37 @@ There are several new syntax to import the concept of functional programing.
   3 4
   ```
 * fold
+  ```
+  @ fold @{: ($1+$2) ($2+$3)} 1 2 [3 4 5]
+  17 14
+  ```
 * len  
   This command returns the length of list. 
+  ```
+  @ len [1 2 3] $ echo
+  3
+  @ @{len $*} 1 2 3 $ echo
+  3
+  ```
 * lenc  
   This command returns the length of string.
+  ```
+  @ lenc "123" $ echo
+  3
+  ```
 * sep  
   This commnad is same as split in other languege.
+  ```
+  @ sep " a b c " $: echo
+  a
+  b
+  c
+  @ sep , ",a,b,c" $: echo
+  
+  a
+  b
+  c
+  ```
 * usep
   ```
   @ usep [1 2 3] $ echo
@@ -462,11 +519,51 @@ There are several new syntax to import the concept of functional programing.
   1,2,3
   ```
 * sub
+  ```
+  @ sub "[aA]*" @ snale_SNALE $ echo
+  sn@le_SN@LE
+  ```
 * timeo
+  ```
+  @ timeo 1 {sleep 2; echo a}
+  @
+  ```
 * fork
+  This command executes argument command or closure in background.
+  ```
+  @ timeo 1 {fork {sleep 2}; echo a}
+  a
+  ```
 * getenv
+  This command puts the environment variable specified at the argument to return value.
+  ```
+  @ getenv LANG $ echo
+  C
+  ```
 * setenv
+  This command sets the value to the environment variable specified at the argument.
+  ```
+  @ setenv LANG C
+  ```
 * type
+  ```
+  @ type [] $ echo
+  LIST
+  ```
 * int
+  ```
+  @ int 1.5 $ echo
+  1
+  @ int -r 1.5 $ echo 
+  2
+  @ int -r 1.4 $ echo 
+  1
+  @ int -c 1.4 $ echo
+  2
+  @ int -f 1.5 $ echo
+  1
+  ```
 * usage
+  This command shows usage the command specified at the argument.
+  When no argument is specified, it shows list of all built-in functions.
 
