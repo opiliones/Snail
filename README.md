@@ -176,6 +176,15 @@ There are several new syntax to import the concept of functional programing.
   @ echo (%6.3f 3.14)
    3.140
   ```
+  "||" operator can use to specify default value.
+  ```
+  @ echo $not_bind
+  Getting an unbound variable: "not_bind"
+  @ echo ($not_bind || a)
+  a
+  @ echo (#[a 1 b 2] c || x)
+  x
+  ```
   
 * Command substitution  
   Snale does not have command substitution syntax.
