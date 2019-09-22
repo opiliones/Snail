@@ -626,6 +626,12 @@ There are several new syntax to import the concept of functional programing.
   @ int -f 1.5 $ echo
   1
   ```
+* glob
+  This command executes glob expansion by argument values.
+  ```
+  @ glob * .*
+  app snale.cabal package.yaml README.md LICENSE test ChangeLog.md src stack.yaml . .gitignore .stack-work .git ..
+  ```
 * usage  
   This command shows usage the command specified at the argument.
   When no argument is specified, it shows list of all built-in functions.
