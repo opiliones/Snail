@@ -629,7 +629,7 @@ There are several new syntax to import the concept of functional programing.
 * glob
   This command executes glob expansion by argument values.
   ```
-  @ glob * .*
+  @ glob * .* $> echo
   app snale.cabal package.yaml README.md LICENSE test ChangeLog.md src stack.yaml . .gitignore .stack-work .git ..
   ```
 * usage  
