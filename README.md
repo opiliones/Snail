@@ -143,7 +143,7 @@ There are several new syntax to import the concept of functional programing.
   @ echo $?
   2
   ```
-  To use positional parameter like functon,
+  To use positional parameter like function,
   "@" has to be add at left paren.
   ```
   @ @($1+$2) 1 1
