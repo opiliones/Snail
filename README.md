@@ -251,7 +251,7 @@ There are several new syntax to import the concept of functional programing.
     ``` 
   - Loop
     ```
-    @ loop @{($1>=5) >>> break; echo $1; ($1+1)} 1
+    @ loop @{($1>=5) &&& break; echo $1; ($1+1)} 1
     1
     2
     3
