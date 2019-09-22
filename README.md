@@ -390,7 +390,7 @@ There are several new syntax to import the concept of functional programing.
   a
   ```
 * catch  
-  This command makes tag to jump.
+  This command makes the tag to jump.
   break command can be used to Non-local Exits in the closure being passed to this command.
 * trap  
   Unlike sh, this command take closure as signal handler.
