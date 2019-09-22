@@ -338,27 +338,34 @@ There are several new syntax to import the concept of functional programing.
     ```
 
 ## Built-in functions
-* print
+* echo  
+  Unlike sh, any option can not be specified. 
+* print  
+  It is almost same as echo, but not add newline at last of string. 
   ```
   @ print a
   a@
   ```
-* true
+* true  
+  Unlike sh, it set argument to return values.
   ```
   @ true 1 2 3 && echo T $@? || echo F $@?
   T 1 2 3
   ```
-* false
+* false  
+  Unlike sh, it set argument to return values.
   ``` 
   @ false 1 2 3 && echo T $@? || echo F $@?
   F 1 2 3
   ```
-* :
+* :  
+  This command is not short version of true command.
+  It does not change return state.
   ```
   @ false; : 1 2 3 && echo T $@? || echo F $@?
   F 1 2 3
   ```
-* ?
+* ?  
   This command is same as *command $> true*.
   ```
   @ ? false 1 2 3 && echo $@?
@@ -379,7 +386,10 @@ There are several new syntax to import the concept of functional programing.
   @ trap {rm file2} EXIT
   @ trap -a {rm file2} EXIT
   ```
-* let
+* let  
+  It binds value to valiable. For List, it works recursively.
+  When the shape is not same between variable name and value list,
+  it retuens false state.
   ```
   @ let a b 1; echo $a $b
   1 1
@@ -389,7 +399,10 @@ There are several new syntax to import the concept of functional programing.
   @ let [a b] 1 && {echo $a} 
   @
   ```
-* letr
+* letr  
+  It binds return values of the argument closure to valiables.
+  When number of variable names are more then return values,
+  it retuens false state.
   ```
   @ letr a {: 1 2}; echo $a
   1
@@ -397,9 +410,10 @@ There are several new syntax to import the concept of functional programing.
   1
   2
   ```
-* def
+* def  
   This command defines function or constant.
-* load
+* load  
+  This command executes the argument file in the corrent environment.
   ```
   @ cat a
   def f {echo a}
@@ -412,14 +426,18 @@ There are several new syntax to import the concept of functional programing.
   @ name-space f
   a
   ```
-* tmpf
+* tmpf  
+  This command makes temporary files and pass the files to the closure as arguments.
+  When exiting from closure, these files are removed.
   ```
   @ tmpf @{ls $1; : $1}
   /tmp/snale2371-1
   @ ls $?
   ls: cannot access '/tmp/snale2371-1': No such file or directory
   ```
-* tmpd
+* tmpd  
+  This command makes temporary directory and pass the files to the closure as argument.
+  When exiting from closure, the directory is removed.
   ```
   @ tmpd @{ls -ld $1; : $1}
   drwx------ 2 root root 4096 Sep 21 23:28 /tmp/snale-146e51aa74ac0b46
@@ -443,43 +461,54 @@ There are several new syntax to import the concept of functional programing.
   @ ? yes yes | read -ss -n3 $ echo
   ye
   ```
-* bool
+* bool  
+  It puts the return status and argument values to return values.
   ```
   @ true 1 2 3 $> bool; echo $@?
   true 1 2 3
   ```
-* ubool
+* ubool  
+  This command is the opposite of bool command.
   ```
   @ true 1 2 3 $> bool $> ubool && echo $@?
   1 2 3
   ```
-* list
+* list  
+  It puts the List of argument values to return value.
   ```
   @ : 1 2 3 $> list $ echo
   1 2 3
   ```
-* ulist
+* ulist  
+  This command is the opposite of list command.
   ```
   @ [1 2 3] $ ulist $> echo
   1 2 3
   ```
-* dict
+* dict  
+  It make the associative array from argument values.
   ```
   @ : a 1 b 2 c 3 $> dict $.b $ echo
   2
   ```
-* udict
+* udict  
+  This command is the opposite of dict command.
   ```
   @ #[a 1 b 2 c 3] $ udict $> echo
   a 1 b 2 c 3
   ```
-* map
+* map  
+  When -n option is specified, this command passes specified number values to the closure or command.
+  When argument closure or command returns multiple values,
+  the return value of this command is the concat of all those return values.
   ```
   @ map -n2 echo [1 2 3 4]
   1 2
   3 4
   ```
-* fold
+* fold  
+  When the argument closure takes three or more argument,
+  you specify multiple values to initial values. 
   ```
   @ fold @{: ($1+$2) ($2+$3)} 1 2 [3 4 5]
   17 14
@@ -511,7 +540,8 @@ There are several new syntax to import the concept of functional programing.
   b
   c
   ```
-* usep
+* usep  
+  This command is the opposite of sep command.
   ```
   @ usep [1 2 3] $ echo
   1 2 3
@@ -524,6 +554,7 @@ There are several new syntax to import the concept of functional programing.
   sn@le_SN@LE
   ```
 * timeo
+  It works like timeout command.
   ```
   @ timeo 1 {sleep 2; echo a}
   @
@@ -546,11 +577,12 @@ There are several new syntax to import the concept of functional programing.
   @ setenv LANG C
   ```
 * type
+  It returns type of argument.
   ```
   @ type [] $ echo
   LIST
   ```
-* int
+* int  
   ```
   @ int 1.5 $ echo
   1
@@ -563,7 +595,7 @@ There are several new syntax to import the concept of functional programing.
   @ int -f 1.5 $ echo
   1
   ```
-* usage
+* usage  
   This command shows usage the command specified at the argument.
   When no argument is specified, it shows list of all built-in functions.
 
