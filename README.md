@@ -376,6 +376,10 @@ There are several new syntax to import the concept of functional programing.
   Return values of each iteration are passed to next iteration.
   Returning closure is meaning "continue" in other languege.
   When -n option is specified, this command does not catch exit by break command.
+  ```
+  @ loop {echo a; loop -n {break}; echo b}
+  a
+  ```
 * catch  
   This command makes tag to jump.
   break command can be used to Non-local Exits in the closure being passed to this command.
