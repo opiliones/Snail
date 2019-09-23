@@ -635,6 +635,13 @@ There are several new syntax to import the concept of functional programing.
   @ glob * .* $> echo
   app snale.cabal package.yaml README.md LICENSE test ChangeLog.md src stack.yaml . .gitignore .stack-work .git ..
   ```
+* shift  
+  Unlike sh, this command returns values removed.
+  ```
+  @ @{shift; echo $?; echo $@} 1 2 3
+  1
+  2 3
+  ```
 * getpid  
   This command returns its process id. 
 * usage  
