@@ -122,50 +122,56 @@ defaultFuncs :: H.HashMap T.Text Val
 defaultFuncs = H.fromList [
 --  ("ret"   , Prim Normal return' ["[COMMAND]..."]),
   ("dict"  , Prim Purely dict    ["[KEY VALUE]..."]),
+  ("udict" , Prim Purely udict   ["[DICTIONALY]..."]),
+  ("del"   , Prim Purely del     ["{KEY|INDEX}..."]),
+  ("ins"   , Prim Purely ins     ["{KEY VALUE|INDEX VALUE}..."]),
   ("+"     , Prim Purely plus''  ["[VALUE]..."]),
   ("true"  , Prim Purely true    ["[VALUE]..."]),
-  (":"     , Prim Purely colon   ["VALUE..."]),
+  (":"     , Prim Purely colon   ["[VALUE]..."]),
   ("false" , Prim Purely false   ["[VALUE]..."]),
   ("exit"  , Prim Normal exit'   ["[NUMBER]..."]),
+  ("return", Prim Normal return' ["[NUMBER]..."]),
   ("break" , Prim Normal jump    ["[VALUE]..."]),
 --  ("breakT", Prim Normal breakT  ["[VALUE]..."]),
 --  ("breakF", Prim Normal breakF  ["[VALUE]..."]),
   ("let"   , Prim Normal unavail ["NAME... VALUE"]),
   ("letr"  , Prim Normal unavail ["-r NAME... COMMAND"]),
   ("def"   , Prim Normal unavail ["NAME {COMMAND|VALUE}"]),
-  ("trap"  , Prim Normal trap    ["COMMAND SIGNAL..."]),
+  ("trap"  , Prim Normal trap    ["[-a] COMMAND SIGNAL...",
+                                  "[SIGNAL...]"]),
   ("cd"    , Prim Normal cd      ["[DIR]"]),
   ("usage" , Prim Normal usage   ["NAME"]),
   ("load"  , Prim Normal unavail ["FILE"]),
-  ("loop"  , Prim Normal unavail ["COMMAND [ARG]..."]),
+  ("loop"  , Prim Normal unavail ["[-n] COMMAND [ARG]..."]),
   ("bool"  , Prim Purely bool    ["COMMAND [ARG]..."]),
   ("ubool" , Prim Purely ubool   ["COMMAND [ARG]..."]),
-  ("read"  , Prim Normal read'   ["[-i] [-n COUNT]"]),
+  ("read"  , Prim Normal read'   ["[-N] [-n COUNT] [-s SEPARATOR]",
+                                  "-a [-N]"]),
   ("echo"  , Prim Normal echo    ["[VALUE]..."]),
-  ("print" , Prim Normal echo    ["[VALUE]..."]),
-  ("show"  , Prim Normal show'   ["VALUE..."]),
+  ("print" , Prim Normal print'  ["[VALUE]..."]),
+  ("show"  , Prim Normal show'   []),
   ("glob"  , Prim Normal glob    ["[-f] EXPRESSION..."]),
   ("sep"   , Prim Purely split   ["[SEPARATOR] STRING"]),
-  ("usep"  , Prim Purely usplit  ["[SEPARATOR] STRING"]),
-  ("sub"   , Prim Purely sub     ["REGEXP REPLACEMENT STRING"]),
-  ("getenv", Prim Normal getenv  ["NAME"]),
+  ("usep"  , Prim Purely usplit  ["[SEPARATOR] LIST"]),
+  ("sub"   , Prim Purely sub     ["REGEXP REPLACEMENT STRING..."]),
+  ("getenv", Prim Normal getenv  ["NAME..."]),
   ("setenv", Prim Normal setenv  ["NAME STRING"]),
   ("map"   , Prim Normal map'    ["[-n NUMBER] COMMAND [ARG]... LIST"]),
-  ("fold"  , Prim Normal fold'   ["COMMAND [ARG]... VALUE LIST"]),
-  ("filter", Prim Normal filter' ["COMMAND [ARG]... VALUE LIST"]),
-  ("len"   , Prim Purely len'    ["VALUE..."]),
+  ("fold"  , Prim Normal fold'   ["COMMAND [ARG]... LIST"]),
+  ("filter", Prim Normal filter' ["COMMAND [ARG]... LIST"]),
+  ("len"   , Prim Purely len'    ["LIST..."]),
   ("lenc"  , Prim Purely lenc    ["VALUE..."]),
 --  ("idx"   , Prim Purely idx     ["NUMBER [NUMBER] LIST"]),
-  ("int"   , Prim Purely int     ["{-r|-c|-f} NUMBER"]),
+  ("int"   , Prim Purely int     ["[{-r|-c|-f}] NUMBER"]),
   ("timeo" , Prim Normal timeo   ["DURATION COMMAND [ARG]..."]),
-  ("check" , Prim Normal check   ["[-bcdefiLnoprsSwxOG] FILE..."]),
+  ("chk"   , Prim Normal check   ["[-bcdefiLnoprsSwxOG] FILE..."]),
 --  ("list?" , Prim Purely isList  ["value..."]),
-  ("type" , Prim Purely isList  ["value..."]),
-  ("list"  , Prim Purely list    ["value..."]),
+  ("type"  , Prim Purely valType ["VALUE..."]),
+  ("list"  , Prim Purely list    ["VALUE..."]),
   ("shift" , Prim Normal shift   ["NUMBER"]),
-  ("ulist" , Prim Purely ulist   ["value..."]),
+  ("ulist" , Prim Purely ulist   ["VALUE..."]),
   ("fork"  , Prim Normal fork    ["COMMAND [ARG]..."]),
-  ("tmpf"  , Prim Normal tmpfile ["[-d DIR] [-p PREFIX] COMMAND"]),
+  ("tmpf"  , Prim Normal tmpfile ["[-d DIR] [-p PREFIX] [-n NUMBER] COMMAND"]),
   ("tmpd"  , Prim Normal tmpdir  ["[-d DIR] [-p PREFIX] COMMAND"]),
   ("catch" , Prim Normal unavail ["COMMAND [ARG]..."])
   ]
@@ -173,6 +179,16 @@ defaultFuncs = H.fromList [
 usagePrint name = Eval $ throwError ([], SomeError $ usageShow name)
 
 unavail env xs = Eval $ throwError ([], SomeError $ "cannot call special functions pia variable")
+
+valType env xs = return env{status=True, ret=map valType' xs}
+  where
+    valType' (Str{})    = toStr "STRING" 
+    valType' (List{})   = toStr "LIST" 
+    valType' (Dict{})   = toStr "DICTIONARY" 
+    valType' (Float{})  = toStr "NUMBER" 
+    valType' (Bool{})   = toStr "BOOL" 
+    valType' (FD{})     = toStr "FD" 
+    valType' (Lambda{}) = toStr "FUNCTION" 
 
 dict env xs = do
   d <- dict' env H.empty xs
@@ -183,6 +199,12 @@ dict env xs = do
       t <- expand env k
       dict' env (H.insert t v m) xs
     dict' env m _ = return m
+
+udict env (Dict d:xs) = do
+  renv <- udict env xs
+  return env{ret=dictToList d ++ ret renv, status=True}
+udict env [] = return env
+udict env xs = usagePrint "udict"
 
 shift env [] = shift env [Float 1]
 shift env [n] = do
@@ -211,19 +233,23 @@ plus'' env xs = do
   ys <- mapM getFloat xs
   return env{ret=[Float $ foldl (+) 0 ys], status=True}
 
-tmpdir = tmpdir' "" Nothing "snale"
-tmpdir' t dir pref env xs =
+tmpdir = tmpdir' "" Nothing "snale" 1
+tmpdir' t dir pref n env xs =
   let (o, s, ys) = optHead xs t in
     case o of
       "d" -> do (x, ys) <- getSubOpt "tmpdir" s ys
                 td <- expand env x
-                tmpdir' s (Just $ T.unpack td) pref env ys
+                tmpdir' s (Just $ T.unpack td) pref n env ys
       "p" -> do (x, ys) <- getSubOpt "tmpdir" s ys
                 p <- expand env x
-                tmpdir' s dir (T.unpack p) env ys
+                tmpdir' s dir (T.unpack p) n env ys
+      "n" -> do (x, ys) <- getSubOpt "tmpdir" s ys
+                num <- getInt x
+                tmpdir' s dir pref num env ys
       "" ->  do
         x <- liftIO $ maybe (withSystemTempDirectory pref) (\d->withTempDirectory d pref) dir $
-               \d->runEval env $ eval (ys ++ [toStr $ T.pack d]) env
+               \d->runEval env $ if n==1 then eval (ys ++ [toStr $ T.pack d]) env
+                                         else tmpdir' t dir pref (n-1) env (ys ++ [toStr $ T.pack d])
         case x of
           Right renv -> return renv
           Left  e    -> Eval $ throwError e
@@ -249,20 +275,11 @@ tmpfile' t dir pref env xs =
           Left  e    -> Eval $ throwError e
       _ -> usagePrint "tmpfile"
 
-isList env [] = return env{status=False, ret=[]}
-isList env [x@List{}] = return env{status=True, ret=[x]}
-isList env [x] = return env{status=False, ret=[x]}
-isList env xs = return env{status=isList' xs, ret=xs}
-  where
-    isList' []          = True
-    isList' (List{}:xs) = isList' xs
-    isList' _           = False
-
 check env (x:xs) = do
   paths <- map (mkPath env) <$> mapM (expand env) xs
   os <- getOptList . T.tail <$> expand env x
   if isJust $ find (\y->isNothing $ T.find (T.head y==) "erwxLsbcdfpSnoiOG") os then
-    usagePrint "check"
+    usagePrint "chk"
   else do
     s <- liftIO $ (and <$> mapM (check' paths) os) `catchError` (errHandlerIO' False status env)
     return env{status=s, ret=xs}
@@ -371,23 +388,33 @@ load env x@(y:xs) = do
     else
       Eval $ throwError ([fromEno eNOENT], SomeError $ path ++ ": no such file or directory")
 
-return' env xs = do
-  renv <- eval xs env
-  Eval $ throwError (ret renv, Returned $ status renv)
-
 colon env xs = return env{ret=xs}
 
 true env xs = return env{ret=xs, status=True}
 
 false env xs = return env{ret=xs, status=False}
 
-exit' env [] = Eval $ throwError ([Float 0], Exited True)
+exit' env [] = if status env then Eval $ throwError ([Float 0], Exited True)
+                             else
+                               case map readInt $ ret env of
+                                 (Just n:_) | n > 0 -> Eval $ throwError ([toFloat n], Exited False)
+                                 _  -> Eval $ throwError ([Float 1], Exited False)
 exit' env (x:_) = do
-  n <- getFloat x
-  case n of
-    0 -> Eval $ throwError ([Float 0], Exited True)
-    _ | n > 0 -> Eval $ throwError ([Float n], Exited False)
-      | otherwise -> Eval $ throwError ([fromEno eINVAL], SomeError $ show n ++ " is not natural number")
+  case readInt x of
+    Just 0 -> Eval $ throwError ([Float 0], Exited True)
+    Just n | n > 0 -> Eval $ throwError ([toFloat n], Exited False)
+    _ -> Eval $ throwError ([fromEno eINVAL], SomeError $ show x ++ " is not natural number")
+
+return' env [] = if status env then Eval $ throwError ([Float 0], Returned True)
+                               else 
+                                 case map readInt $ ret env of
+                                   (Just n:_) | n > 0 -> Eval $ throwError ([toFloat n], Returned False)
+                                   _  -> Eval $ throwError ([Float 1], Returned False)
+return' env (x:_) = do
+  case readInt x of
+    Just 0 -> Eval $ throwError ([Float 0], Returned True)
+    Just n | n > 0 -> Eval $ throwError ([toFloat n], Returned False)
+    _ -> Eval $ throwError ([fromEno eINVAL], SomeError $ show x ++ " is not natural number")
 
 jump env _ = Eval $ throwError (ret env, Jump (status env) (jumpID env))
 
@@ -396,7 +423,7 @@ echo env xs = do
   liftIO $ TIO.hPutStrLn (out env) $ T.unwords x
   return env{status=True, ret=[Float 0]}
 
-print env xs = do
+print' env xs = do
   x <- mapM (expand env) xs
   liftIO $ TIO.hPutStr (out env) $ T.concat x
   return env{status=True, ret=[Float 0]}
@@ -438,7 +465,7 @@ getIntForIdx xs x = do
       | n < 0 -> return $ Just $ length xs + n + 1
       | otherwise -> return $ Just n
 
-setRet env (xs@(_:_:[])) =
+setRet env xs@(_:_:_) =
   let vars = init xs
       cmd = last xs  in do
     renv <- eval [cmd] env
@@ -446,10 +473,10 @@ setRet env (xs@(_:_:[])) =
     return venv{ret=ret renv}
 setRet env xs = Eval $ throwError ([fromEno eINVAL], NumArgs "2 or more" $ length xs)
 
-set env xs@(_:_:[]) =
+set env xs@(_:_:_) =
   let v = last xs  in do
     renv <- foldM (\e name->setVar e name v) env (init xs)
-    return renv{ret=[v]}
+    return renv
 set env xs = Eval $ throwError ([fromEno eINVAL], NumArgs "2 or more" $ length xs)
 
 setVar :: Env -> Val -> Val -> Eval Env
@@ -461,9 +488,9 @@ setVar env (List x) (List v) =
     Just y -> do
       renv <- foldM (\e (n,y)->setVar e n y) env y
       if status renv then return renv
-                     else return $ env{status=False, ret=ret renv}
-    _ -> return $ env{status=False, ret=v}
-setVar env _ v = return $ env{status=False, ret=[v]}
+                     else return $ env{status=False}
+    _ -> return $ env{status=False}
+setVar env _ v = return $ env{status=False}
 
 zipMaybe [] [] = Just []
 zipMaybe (x:xs) (y:ys) = ((x, y):) <$> zipMaybe xs ys
@@ -534,44 +561,39 @@ getSubOpt n "" [] = usagePrint n
 getSubOpt _ "" (x:xs) = return (x, xs)
 getSubOpt _ t xs = return (toStr t, xs)
 
-read' env xs = read'' "" False True (-1) "\n" env xs
-read'' :: T.Text -> Bool -> Bool -> Int -> String -> Env -> [Val] -> Eval Env
-read'' t all delNL nChar sep env xs =
+read' env xs = read'' "" True (-1) "\n" env xs
+read'' :: T.Text -> Bool -> Int -> String -> Env -> [Val] -> Eval Env
+read'' t delNL nChar sep env xs =
   let (o, s, ys) = optHead xs t in
     case o of
-      "a" -> read'' s True delNL (-1) "" env ys
-      "N" -> read'' s True False nChar sep env ys
+      "a" -> read'' s delNL (-1) "" env ys
+      "N" -> read'' s False nChar sep env ys
       "n" -> do (x, ys) <- getSubOpt "read" s ys
                 n <- getInt x
-                read'' "" False delNL n sep env ys
+                read'' "" delNL n sep env ys
       "s" -> do (x, ys) <- getSubOpt "read" s ys
                 s <- T.unpack <$> expand env x
-                read'' "" False delNL nChar s env ys
+                read'' "" delNL nChar s env ys
       "" -> do
         eof <- liftIO $ hIsEOF (inn env)
         if eof then 
           return env{status=False, ret=[]}
         else
-          if nChar > 0 || sep /= "\n" then do
-            cs <- liftIO $ hGetNChar sep nChar (inn env)
-            if null cs then
-              return env{status=True, ret=[toStr ""]}
+          if nChar == (-1) && sep == "\n" then do
+            x <- liftIO $ TIO.hGetLine (inn env)
+            return env{status=True, ret=[toStr x]}
+          else if nChar == (-1) && sep == "" then do  
+            x <- liftIO $ TIO.hGetContents (inn env)
+            if delNL then
+              return env{status=True, ret=[toStr $ delNewLn x]}
             else
-              return env{status=True, ret=[toStr $ T.pack cs]}
-          else
-            if all then do
-              x <- liftIO $ TIO.hGetContents (inn env)
-              if delNL then
-                return env{status=True, ret=[toStr $ delNewLn x]}
-              else
-                return env{status=True, ret=[toStr x]}
-            else do
-              x <- liftIO $ TIO.hGetLine (inn env)
               return env{status=True, ret=[toStr x]}
+          else do
+            cs <- liftIO $ hGetNChar sep nChar delNL (inn env)
+            return env{status=True, ret=[toStr $ T.pack cs]}
   where
-    hGetNChar :: String -> Int -> Handle -> IO String
-    hGetNChar s 0 h = return []
-    hGetNChar s n h = do
+    hGetNChar :: String -> Int -> Bool -> Handle -> IO String
+    hGetNChar s n d h = do
       eof <- liftIO $ hIsEOF h
       if eof then
         return []
@@ -579,8 +601,13 @@ read'' t all delNL nChar sep env xs =
         c <- hGetChar h
         if elem c s then
           return []
+        else if n <= 1 then
+          if d && c == '\n' then
+            return []
+          else
+            return [c]
         else
-          (:) c <$> hGetNChar s (n-1) h
+          (:) c <$> hGetNChar s (n-1) d h
     delNewLn "" = ""
     delNewLn c = case T.last c of
                    '\n' -> delNewLn $ T.init c
@@ -600,10 +627,13 @@ glob env xs = do
 split env [z, x] = do
   s <- expand env z
   t <- expand env x
-  return env{status=True, ret=map toStr $ T.splitOn s t}
+  if s == "" then
+    return env{status=True, ret=[List $ map (toStr.T.singleton) $ T.unpack t]}
+  else
+    return env{status=True, ret=[List $ map toStr $ T.splitOn s t]}
 split env [x] = do
   t <- expand env x
-  return env{status=True, ret=map toStr $ T.words t}
+  return env{status=True, ret=[List $ map toStr $ T.words t]}
 split env _ = usagePrint "sep"
 
 usplit env [z, List x] = do
@@ -660,23 +690,23 @@ sub env x = do
           where (skipStr, match, leftStr) = src =~ reg ::(String,String,String)
     _ -> usagePrint "sub"
 
-mapr' env xs = case xs of
-  _:_:_ -> case last xs of
-    List l -> do
-      envs <- mapM' env (\x-> eval (init xs ++ [x]) env) l
-      return env {ret=concat $ map ret envs, status=all status envs}
-    _ -> usagePrint "map"
-  _ -> usagePrint "map"
-  where
-    mapM' :: Env -> (Val -> Eval Env) -> [Val] -> Eval [Env]
-    mapM' _ _ [] = return []
-    mapM' env f (x:xs) = do
-      y <- case x of
-             List l -> do
-               envs <- mapM' env f l
-               return env {ret=[List $ concat $ map ret envs], status=all status envs}
-             _ -> f x
-      (y:) <$> mapM' env f xs
+--mapr' env xs = case xs of
+--  _:_:_ -> case last xs of
+--    List l -> do
+--      envs <- mapM' env (\x-> eval (init xs ++ [x]) env) l
+--      return env {ret=concat $ map ret envs, status=all status envs}
+--    _ -> usagePrint "map"
+--  _ -> usagePrint "map"
+--  where
+--    mapM' :: Env -> (Val -> Eval Env) -> [Val] -> Eval [Env]
+--    mapM' _ _ [] = return []
+--    mapM' env f (x:xs) = do
+--      y <- case x of
+--             List l -> do
+--               envs <- mapM' env f l
+--               return env {ret=[List $ concat $ map ret envs], status=all status envs}
+--             _ -> f x
+--      (y:) <$> mapM' env f xs
 
 map' = map'' "" 1
 map'' t nopt env xs = let (o, s, ys) = optHead xs t in
@@ -699,7 +729,7 @@ map'' t nopt env xs = let (o, s, ys) = optHead xs t in
     foldListN n [] = []
     foldListN n l = take n l : foldListN n (drop n l)
 
-foldr = fold'' foldM
+--foldr = fold'' foldM
 fold' = fold'' foldM'
 
 fold'' foldFn env xs = case xs of
@@ -736,10 +766,15 @@ lenc env xs = do
   l <- mapM (\x->toFloat . T.length <$> expand env x) xs
   return env{status=True, ret=l}
 
-getenv env [x] = do
-  y <- expand env x >>= liftIO . getEnv . T.unpack
-  return env{status=True, ret=[toStr $ T.pack y]}
-getenv env x = Eval $ throwError ([fromEno eINVAL], NumArgs "1" $ length x)
+getenv env [] = return env
+getenv env (x:xs) = do
+  t <- expand env x
+  y <- case t of
+         "PID" -> toFloat <$> liftIO P.getProcessID
+         "PPID" -> toFloat <$> liftIO P.getParentProcessID
+         _ -> toStr . T.pack <$> liftIO (getEnv (T.unpack t))
+  renv <- getenv env xs
+  return renv{status=True, ret=y:ret renv}
 
 setenv env xs@[_, _] = do
   [n, v] <- map T.unpack <$> mapM (expand env) xs
@@ -782,7 +817,7 @@ trap' aopt env (f:ys) = do
                        0 -> do tinfo <- readIORef (thread env)
                                writeIORef (thread env) tinfo{exitTrap=f:exitTrap tinfo}
                        _ -> do Catch h <- installHandler x (Catch $ trapHandler env f) Nothing
-                               installHandler x (Catch (h >> trapHandler env f)) Nothing
+                               installHandler x (Catch (trapHandler env f >> h)) Nothing
                                return ()
                    else
                      case x of
@@ -819,8 +854,9 @@ data Val = Float Double
          | LinkedStr [Val]
          | Lambda LambdaType ParseEnv (Maybe Env) (Env -> Eval Env)
          | List [Val]
+         | DList [Val]
          | Prim LambdaType (Env -> [Val] -> Eval Env) [T.Text]
-         | PrimFS (Env -> [Val] -> Eval Env)
+--         | PrimFS (Env -> [Val] -> Eval Env)
          | Rd ((Env -> Eval Env) -> Env -> Eval Env)
 instance Show Val where
   show (Float x)          = show x
@@ -834,8 +870,9 @@ instance Show Val where
   show (LinkedStr x)      = concatMap show x
   show Lambda{}           = "{LAMBDA}"
   show (List x)           = show x
+  show (Dict x)           = show x
   show Prim{}             = "_PRIMITIVE_"
-  show PrimFS{}           = "_PRIMITIVE_"
+--  show PrimFS{}           = "_PRIMITIVE_"
 instance Eq Val where
   (==) (Float x) (Float y)   = x == y
   (==) (Str _ x) (Str _ y) = x == y
@@ -913,6 +950,9 @@ valExpand env (Lambda f p Nothing x:xs) = (Lambda f p (Just env) x:) <$> valExpa
 valExpand env (List x:xs) = do
   v <- valExpand env x
   (:) (List v) <$> valExpand env xs
+valExpand env (DList x:xs) = do
+  renv <- valExpand env x >>= dict env
+  (++) (ret renv) <$> valExpand env xs
 valExpand env (LinkedStr x:xs) = do
  y:ys <- valExpand env x >>= mapM (expandL env)
  (List (map toStr (foldl' expLinkedStr y ys)) :) <$> valExpand env xs
@@ -962,12 +1002,18 @@ expand env (Bool False) = return "false"
 expand env (FD x) = return $ "&" `T.append` TS.showt x
 --expand env (Lambda _ (Just fenv) vs) = return "{LAMBDA}"
 expand env (List vs) = T.unwords <$> mapM (expand env) vs
+expand env (Dict d) = T.unwords <$> mapM (expand env) (dictToList d)
 expand env x = Eval $ throwError ([fromEno eINVAL], TypeMismatch "expandable value" x)
 
 expandL :: Env -> Val -> Eval [T.Text]
 --expandL env (Lambda _ (Just fenv) vs) = return ["{LAMBDA}"]
 expandL env (List vs)                 = concat <$> mapM (expandL env) vs
 expandL env x                         = (:[]) <$> expand env x
+
+dictToList :: H.HashMap T.Text Val -> [Val]
+dictToList d = concat $ map dictToList' $ H.toList d
+  where
+    dictToList' (k, v) = [toStr k, v]
 
 getInt :: Val -> Eval Int
 getInt (Float f) = return $ floor f
@@ -1116,11 +1162,11 @@ type Parser = ParsecT Custom T.Text (StateT ParseEnv IO)
 -- eval
 --
 
-evalScript :: Env -> [[Val]] -> Eval Env
-evalScript = foldM _eval
-  where
-    _eval env (PrimFS fn:xs) = valExpand env xs >>= fn env
-    _eval env xs             = eval xs env
+--evalScript :: Env -> [[Val]] -> Eval Env
+--evalScript = foldM _eval
+--  where
+--    _eval env (PrimFS fn:xs) = valExpand env xs >>= fn env
+--    _eval env xs             = eval xs env
 
 eval = eval' normalDispatch
 evalPure = eval' pureDispatch
@@ -1157,9 +1203,7 @@ boolDispatch env b xs ys = do
                      return env{ret=xs2 ++ zs, status=True}
 
 dictDispatch :: (H.HashMap T.Text Val) -> Env -> [Val] -> Eval Env
-dictDispatch d env [] = return env{ret=dump d, status=True}
-  where
-    dump d = concat $ map (\(k, v)->[toStr k, v]) $ H.toList d
+dictDispatch d env [] = return env{ret=[Dict d], status=True}
 dictDispatch d env [x] = do
   k <- expand env x
   case H.lookup k d of
@@ -1182,33 +1226,48 @@ foldList2' (x:y:xs) = (x, y):foldList2 xs
 
 ins env x@(_:_:_) =
   case last x of
-    Dict d -> ins' env d (init x)
+    Dict d -> insDict env d (init x)
+    List l -> insList env l (init x)
     _ -> usagePrint "ins"
   where
-    ins' env d [] = return env
-    ins' env d [x] = return env
-    ins' env d (x:v:xs) = do
+    insDict env d [] = return env{ret=[Dict d], status=True}
+    insDict env d [x] = return env{ret=[Dict d], status=True}
+    insDict env d (x:v:xs) = do
       k <- expand env x
-      ins' env (H.insert k v d) xs
+      insDict env (H.insert k v d) xs
+    insList env l [] = return env{ret=[List l], status=True}
+    insList env l [x] = return env{ret=[List l], status=True}
+    insList env l (x:v:xs) = do
+      y <- getIntForIdx l x
+      case y of
+        Just n -> insList env (take (n-1) l ++ v:drop (n-1) l) xs
+        _ -> usagePrint "ins"
 ins env _ = usagePrint "ins"
-  
-del env (x:_) =
-  case last x of
-    Dict d -> del' env d (init x)
+
+del env xs@(_:_) =
+  case last xs of
+    Dict d -> delDict env d (init xs)
+    List l -> do
+      ys <- sequence <$> mapM (getIntForIdx l) (init xs)
+      case ys of
+        Just ns -> delList env l (reverse $ sort ns)
+        _ -> usagePrint "del"
     _ -> usagePrint "del"
   where
-    del' env d [] = return env
-    del' env d [x] = return env
-    del' env d (x:xs) = do
+    delDict env d [] = return env{ret=[Dict d], status=True}
+    delDict env d (x:xs) = do
       k <- expand env x
-      del' env (H.delete k d) xs
+      delDict env (H.delete k d) xs
+    delList env l [] = return env{ret=[List l], status=True}
+    delList env l (n:ns) = do
+      delList env (take (n-1) l ++ drop n l) ns
 del env _ = usagePrint "del"
 
 --listDispatch d env [] = let vs = map toStr $ H.keys d in
 --                          return env{ret=vs, status=not $ null vs}
 
 listDispatch :: [Val] -> Env -> [Val] -> Eval Env
-listDispatch d env [] = return env{ret=d, status=True}
+listDispatch d env [] = return env{ret=[List d], status=True}
 listDispatch d env [x] = do
   y <- getIntForIdx d x
   case y of
@@ -1311,7 +1370,7 @@ cmdExec c cs env = (do
                    { std_in    = UseHandle $ inn env,
                      std_out   = UseHandle $ out env,
                      std_err   = UseHandle $ err env,
-                     close_fds = False,
+                     close_fds = True,
                      cwd       = Just $ dir env }
     ecode <- waitForProcess h
     case ecode of
@@ -1573,15 +1632,16 @@ genEval = do
            else return x
   where
     table :: [[Operator Parser (Env -> Eval Env)]]
-    table = [ [ prefix (string "!") not'' ]
+    table = [ [ prefix (string "!") not''
+              , prefix (string "?") truely ]
             , [ binary (string ";;") comma' ]
             , [ binary (string "|[2]") (pipe' (\o e->e{err=o}))
               , binary (string "|[2=1]" <|> string "|[1=2]") (pipe' (\o e->e{err=o, out=o}))
               , binary (string "|[1]" <|> string "|" >> notFollowedBy "|") (pipe' (\o e->e{out=o})) ]
             , [ binary (parseDoller "$$") genL
               , binary (parseDoller "$:") genMap
-              , binary (parseDoller "$&") evalIf
-              , binary (parseDoller "$|") evalElse
+              , binary (parseDoller "$&" <|> parseDoller "&$") evalIf
+              , binary (parseDoller "$|" <|> parseDoller "|$") evalElse
               , binary (parseDoller "$>") genNL
               , binary (parseDoller "$.") genL
               , binary (parseDoller "$") genL ]
@@ -1591,7 +1651,7 @@ genEval = do
               , binary (string "&&") evalIf
               , binary (string "||") evalElse
               , binary (string "!!") evalNull
-              , binary (string "|!") evalElseNull
+              , binary (string "|!" <|> string "!|") evalElseNull
               , newLine ] ]
     newLine = InfixL (genNL <$ try (some (lineComment <|> symbol spaces "\n" <|> symbol spaces ";")))
     binary name f = InfixL (f <$ try (andBrank name))
@@ -1626,6 +1686,8 @@ genMap f g e = do
 switchNot f = switch (not'' f)
  
 not'' f e = f e >>= \e->return e{status=not $ status e} 
+
+truely f e = f e >>= \e->return e{status=True}
 
 comma' f g e = do
   re1 <- f e
@@ -1766,7 +1828,9 @@ genExpr' xs@(Str _ s:cs) = case H.lookup s defaultFuncs of
 genExpr' xs@(x:_) = return $ evalPure xs
 
 parseRedirect :: Parser Val
-parseRedirect = (string "<" >> parseRedirectTo ReadMode (\e h->e{inn=h}))
+parseRedirect = (string "<" >> ((string "[2]" >> copyHandle (\e h->e{inn=h}) err)
+                            <|> (string "[1]" >> copyHandle (\e h->e{inn=h}) out)
+                            <|> (parseRedirectTo ReadMode (\e h->e{inn=h}))))
             <|> (string ">>" >> ((string "[2]" >> parseRedirectTo AppendMode (\e h->e{err=h}))
                              <|> (string "[1]" >> parseRedirectTo AppendMode  (\e h->e{out=h}))
                              <|> ((string "[2=1]" <|> string "[1=2]") >> parseRedirectTo AppendMode (\e h->e{err=h, out=h}))
@@ -1774,11 +1838,14 @@ parseRedirect = (string "<" >> parseRedirectTo ReadMode (\e h->e{inn=h}))
             <|> (string ">" >> ((string "[2]" >> parseRedirectTo WriteMode (\e h->e{err=h}))
                             <|> (string "[1]" >> parseRedirectTo WriteMode (\e h->e{out=h}))
                             <|> ((string "[2=1]" <|> string "[1=2]") >> parseRedirectTo WriteMode (\e h->e{err=h, out=h}))
+                            <|> ((string "[2<1]" <|> string "[1>2]") >> copyHandle (\e h->e{out=h}) err)
+                            <|> ((string "[2>1]" <|> string "[1<2]") >> copyHandle (\e h->e{err=h}) out)
+                            <|> ((string "[2<>1]" <|> string "[1<>2]") >> swapHandle)
                             <|> (parseRedirectTo WriteMode (\e h->e{out=h}))))
   where
+    swapHandle = return $ Rd (\cmd e->setRetEnv e  <$> cmd (e{err=out e, out=err e}))
+    copyHandle df sf = return $ Rd (\cmd e->setRetEnv e  <$> cmd (df e (sf e)))
     parseRedirectTo m f = spaceAnd $ 
-      (do string "&1"; return $ Rd (\cmd e->setRetEnv e  <$> cmd (f e (out e)))) <|>
-      (do string "&2"; return $ Rd (\cmd e->setRetEnv e  <$> cmd (f e (err e)))) <|>
       (do x <- parseWord ""
           return $ Rd $ \cmd e-> do  [y] <- valExpand e [x]
                                      file <- mkPath e <$> expand e y
@@ -1789,7 +1856,7 @@ parseRedirect = (string "<" >> parseRedirectTo ReadMode (\e h->e{inn=h}))
 
 parseWord :: String -> Parser Val
 parseWord b = do
-  xs <- some $ parseClsr <|> parseList <|> parseDoller <|> parseTilde <|> parseSym b <|> parseStr
+  xs <- some $ parseClsr <|> parseList <|> parseDict <|> parseDoller <|> parseTilde <|> parseSym b <|> parseStr
   return $ case xs of
     [y] -> y
     _ -> LinkedStr xs
@@ -1864,7 +1931,9 @@ genLambda t f = do p1 <- get
         takeJust _ x@(Just _) = x
         takeJust x _          = x
 
-parseList = List <$> between (symbol brank "[") (string "]" <?> "square bracket") (some $ andBrank $ parseWord "")
+parseList = List <$> between (symbol brank "[") (string "]" <?> "square bracket") (many $ andBrank $ parseWord "")
+
+parseDict = DList <$> between (symbol brank "#[") (string "]" <?> "square bracket") (many $ andBrank $ parseWord "")
 
 parseSym :: String -> Parser Val
 parseSym b = do
@@ -1938,8 +2007,7 @@ genExpr = try (makeExprParser (--parens genExpr
     table :: [[Operator Parser (Env -> Eval Env)]]
     table = [ [ binary  "^"  pow' ]
             , [ prefix  "-"  neg
-              , prefix  "+"  id
-              , prefix  "!"  not''' ]
+              , prefix  "+"  id   ]
             , [ binary  "*"  mul'
               , binary  "/"  div'
               , binary  "%"  mod'  ]
@@ -1952,6 +2020,7 @@ genExpr = try (makeExprParser (--parens genExpr
             , [ binary  "==" eq'
               , binary  "="  same'
               , binary  "~"  match' ]
+            , [ prefix  "!"  not''' ]
             , [ binary  "&&" evalIf
               , binary  "||" evalElse
               , binary  "!!" evalNull
