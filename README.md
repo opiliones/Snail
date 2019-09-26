@@ -604,6 +604,8 @@ There are several new syntax to import the concept of functional programing.
   ```
   @ getenv LANG $ echo
   C
+  @ getenv PID PPID $> echo
+  
   ```
 * setenv  
   This command sets the value to the environment variable specified at the argument.
@@ -642,8 +644,6 @@ There are several new syntax to import the concept of functional programing.
   1
   2 3
   ```
-* getpid  
-  This command returns its process id. 
 * usage  
   This command shows usage the command specified at the argument.
   When no argument is specified, it shows list of all built-in functions.
