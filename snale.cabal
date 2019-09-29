@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 210804e0e5ddea3c794d2a89019c88ba7972b1a60379b7489b41b65ebcb10ce7
+-- hash: 44634592a9301439722714b93a517ea3e464a4d0d114103f71ff38e9b0e49681
 
 name:           snale
 version:        0.1.0.0
@@ -47,7 +47,7 @@ executable snale-exe
       Paths_snale
   hs-source-dirs:
       app
-  ghc-options: -threaded -feager-blackholing -rtsopts -with-rtsopts=-N -XStrictData -XStrict -O3
+  ghc-options: -threaded -feager-blackholing -rtsopts -with-rtsopts=-N -XStrictData -XStrict
   build-depends:
       Glob
     , base >=4.7 && <5
@@ -65,6 +65,7 @@ executable snale-exe
     , process
     , regex-posix
     , repline
+    , safe-exceptions
     , scientific
     , snale
     , split

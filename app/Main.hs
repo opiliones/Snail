@@ -12,6 +12,7 @@ import           Foreign.C.Error
 import           Codec.Binary.UTF8.String
 import           Control.Concurrent
 import qualified Control.Exception.Base    as E
+import qualified Control.Exception.Safe    as ES
 import           Control.Monad
 import           Control.Monad.State
 import           Control.Monad.Except
@@ -71,6 +72,7 @@ data Env = Env { status :: Bool,
                  funcs  :: IORef (H.HashMap T.Text Val),
                  thread :: IORef ThreadInfo,
                  idSrc  :: IORef Int
+--                 ctrlC  :: Handler
                  }
 
 sethandles denv senv = denv { out = out senv,
@@ -176,9 +178,9 @@ defaultFuncs = H.fromList [
   ("catch" , Prim Normal unavail ["COMMAND [ARG]..."])
   ]
 
-usagePrint name = Eval $ throwError ([], SomeError $ usageShow name)
+usagePrint name = Eval $ ES.throw $ SomeError [] $ usageShow name
 
-unavail env xs = Eval $ throwError ([], SomeError $ "cannot call special functions pia variable")
+unavail env xs = Eval $ ES.throw $ SomeError [] "cannot call special functions pia variable or argument"
 
 valType env xs = return env{status=True, ret=map valType' xs}
   where
@@ -202,8 +204,8 @@ dict env xs = do
 
 udict env (Dict d:xs) = do
   renv <- udict env xs
-  return env{ret=dictToList d ++ ret renv, status=True}
-udict env [] = return env
+  return env{ret=dictToList d ++ ret renv}
+udict env [] = return env{ret=[], status=True}
 udict env xs = usagePrint "udict"
 
 shift env [] = shift env [Float 1]
@@ -252,7 +254,7 @@ tmpdir' t dir pref n env xs =
                                          else tmpdir' t dir pref (n-1) env (ys ++ [toStr $ T.pack d])
         case x of
           Right renv -> return renv
-          Left  e    -> Eval $ throwError e
+          Left  e    -> Eval $ ES.throw e
       _ -> usagePrint "tmpdir"
 
 tmpfile = tmpfile' "" Nothing "snale"
@@ -272,7 +274,7 @@ tmpfile' t dir pref env xs =
                         runEval env $ eval (ys ++ [toStr $ T.pack d]) env
         case x of
           Right renv -> return renv
-          Left  e    -> Eval $ throwError e
+          Left  e    -> Eval $ ES.throw e
       _ -> usagePrint "tmpfile"
 
 check env (x:xs) = do
@@ -281,7 +283,7 @@ check env (x:xs) = do
   if isJust $ find (\y->isNothing $ T.find (T.head y==) "erwxLsbcdfpSnoiOG") os then
     usagePrint "chk"
   else do
-    s <- liftIO $ (and <$> mapM (check' paths) os) `catchError` (errHandlerIO' False status env)
+    s <- liftIO $ (and <$> mapM (check' paths) os) `ES.catch` (errHandlerIO' False status env)
     return env{status=s, ret=xs}
   where
     check' :: [String] -> T.Text -> IO Bool
@@ -327,7 +329,7 @@ usage env [x] = do
   n <- expand env x
   liftIO $ hPutStrLn (out env) (usageShow n)
   return env{status=True, ret=[]}
-usage env xs = Eval $ throwError ([fromEno eINVAL], NumArgs "1" $ length xs)
+usage env xs = Eval $ ES.throw $ NumArgs [fromEno eINVAL] "1" $ length xs
 
 usageShow :: T.Text -> String
 usageShow n =
@@ -353,13 +355,13 @@ cd env x = do
   e <- liftIO $ fileExist path
   if e then do
     f <- liftIO $ (isDirectory <$> getFileStatus path)
-                  `catchError` \e -> hPrint (err env) e >> return False
+                  `ES.catchIOError` \e -> hPrint (err env) e >> return False
     if f then liftIO $ (do
       setCurrentDirectory path
       return $ env {status=True, ret=[Float 0], dir=path}
-      ) `catchError` errHandlerIO env
-    else Eval $ throwError ([fromEno eNOENT], SomeError $ normalise path ++ " is not directory")
-  else Eval $ throwError ([fromEno eNOENT], SomeError $ normalise path ++ ": no such file or directory")
+      ) `ES.catch` errHandlerIO env
+    else Eval $ ES.throw $ SomeError [fromEno eNOENT] $ normalise path ++ " is not directory"
+  else Eval $ ES.throw $ SomeError [fromEno eNOENT] $ normalise path ++ ": no such file or directory"
 
 mkPath :: Env -> T.Text -> String
 mkPath env x =
@@ -374,19 +376,19 @@ load env x@(y:xs) = do
     e <- liftIO $ fileExist path --todo
     if e then do
       code <- liftIO $ TIO.readFile (mkPath env file)
-                       `catchError` \e -> hPrint (err env)  e >> return ""
+                       `ES.catchIOError` \e -> hPrint (err env) e >> return ""
       z <- liftIO $ runStateT (runParserT genEval "snale" code) (parenv env)
       case z of
         (Right val, rpenv) -> let nenv = env{parenv=rpenv} in do
           x <- liftIO $ runEval nenv $ val nenv
           case x of
             Right renv -> load renv xs
-            Left e     -> Eval $ throwError e
+            Left e     -> Eval $ ES.throw e
         (Left e, s) -> do
           liftIO $ hPutStr (err env) (parseErrorTextPretty e)
           return env{status=False, ret=[fromEno eINVAL]}
     else
-      Eval $ throwError ([fromEno eNOENT], SomeError $ path ++ ": no such file or directory")
+      Eval $ ES.throw $ SomeError [fromEno eNOENT] $ path ++ ": no such file or directory"
 
 colon env xs = return env{ret=xs}
 
@@ -394,29 +396,29 @@ true env xs = return env{ret=xs, status=True}
 
 false env xs = return env{ret=xs, status=False}
 
-exit' env [] = if status env then Eval $ throwError ([Float 0], Exited True)
+exit' env [] = if status env then Eval $ ES.throw $ Exited [Float 0] True
                              else
                                case map readInt $ ret env of
-                                 (Just n:_) | n > 0 -> Eval $ throwError ([toFloat n], Exited False)
-                                 _  -> Eval $ throwError ([Float 1], Exited False)
+                                 (Just n:_) | n > 0 -> Eval $ ES.throw $ Exited [toFloat n] False
+                                 _  -> Eval $ ES.throw $ Exited [Float 1] False
 exit' env (x:_) = do
   case readInt x of
-    Just 0 -> Eval $ throwError ([Float 0], Exited True)
-    Just n | n > 0 -> Eval $ throwError ([toFloat n], Exited False)
-    _ -> Eval $ throwError ([fromEno eINVAL], SomeError $ show x ++ " is not natural number")
+    Just 0 -> Eval $ ES.throw $ Exited [Float 0] True
+    Just n | n > 0 -> Eval $ ES.throw $ Exited [toFloat n] False
+    _ -> Eval $ ES.throw $ SomeError [fromEno eINVAL] $ show x ++ " is not natural number"
 
-return' env [] = if status env then Eval $ throwError ([Float 0], Returned True)
+return' env [] = if status env then Eval $ ES.throw $ Returned [Float 0] True
                                else 
                                  case map readInt $ ret env of
-                                   (Just n:_) | n > 0 -> Eval $ throwError ([toFloat n], Returned False)
-                                   _  -> Eval $ throwError ([Float 1], Returned False)
+                                   (Just n:_) | n > 0 -> Eval $ ES.throw $ Returned [toFloat n] False
+                                   _  -> Eval $ ES.throw $ Returned [Float 1] False
 return' env (x:_) = do
   case readInt x of
-    Just 0 -> Eval $ throwError ([Float 0], Returned True)
-    Just n | n > 0 -> Eval $ throwError ([toFloat n], Returned False)
-    _ -> Eval $ throwError ([fromEno eINVAL], SomeError $ show x ++ " is not natural number")
+    Just 0 -> Eval $ ES.throw $ Returned [Float 0] True
+    Just n | n > 0 -> Eval $ ES.throw $ Returned [toFloat n] False
+    _ -> Eval $ ES.throw $ SomeError [fromEno eINVAL] $ show x ++ " is not natural number"
 
-jump env _ = Eval $ throwError (ret env, Jump (status env) (jumpID env))
+jump env _ = Eval $ ES.throw $ Jumped (ret env) (status env) (jumpID env)
 
 echo env xs = do
   x <- mapM (expand env) xs
@@ -471,13 +473,13 @@ setRet env xs@(_:_:_) =
     renv <- eval [cmd] env
     venv <- foldM (\e->uncurry (setVar e)) env $ zip vars (ret renv)
     return venv{ret=ret renv}
-setRet env xs = Eval $ throwError ([fromEno eINVAL], NumArgs "2 or more" $ length xs)
+setRet env xs = Eval $ ES.throw $ NumArgs [fromEno eINVAL] "2 or more" $ length xs
 
 set env xs@(_:_:_) =
   let v = last xs  in do
     renv <- foldM (\e name->setVar e name v) env (init xs)
     return renv
-set env xs = Eval $ throwError ([fromEno eINVAL], NumArgs "2 or more" $ length xs)
+set env xs = Eval $ ES.throw $ NumArgs [fromEno eINVAL] "2 or more" $ length xs
 
 setVar :: Env -> Val -> Val -> Eval Env
 setVar env (Str _ name) v
@@ -511,7 +513,7 @@ zipMaybe _ _ = Nothing
 --    (arg, ys) <- case () of
 --                   _| T.length s == 2 && not (null xs) -> return (head xs, tail xs)
 --                    | T.length s == 2 ->
---                      Eval $ throwError ([fromEno eNOENT], SomeError $ usageShow name)
+--                      Eval $ ES.throw $ SomeError [fromEno eNOENT] $ $ usageShow name
 --                    | otherwise -> return (Str _ $ T.drop 2 s, xs)
 --    (vs, ret) <- getOptEasy havArg noArg name ys
 --    if H.member (T.take 2 s) ret
@@ -524,18 +526,18 @@ zipMaybe _ _ = Nothing
 --    in do
 --      (vs, ret) <- getOptEasy havArg noArg name ys
 --      return (vs, H.insert (T.take 2 s) [] ret)
---  | T.isPrefixOf "-" s && s /= "-" = Eval $ throwError ([fromEno eNOENT], SomeError $ usageShow name)
+--  | T.isPrefixOf "-" s && s /= "-" = Eval $ ES.throw $ SomeError [fromEno eNOENT] $ $ usageShow name
 --getOptEasy havArg noArg name xs = return (xs, H.empty)
 
 --exclusiveOpt :: [T.Text] -> T.Text -> H.HashMap T.Text [Val] -> Eval ()
 --exclusiveOpt list name opt
 --  | length (H.filterWithKey (\x y -> elem x list) opt) < 2 = return ()
---  | otherwise = Eval $ throwError ([fromEno eNOENT], SomeError $ usageShow name)
+--  | otherwise = Eval $ ES.throw $ SomeError [fromEno eNOENT] $ $ usageShow name
 
 def env [Str _ name, body@Lambda{}] = def' env name body
 def env (Str _ name: ys) = def' env name $ Prim Purely (\e _->return e{ret=ys}) []
-def env [x, _] = Eval $ throwError ([fromEno eINVAL], TypeMismatch "string" x)
-def env x = Eval $ throwError ([fromEno eINVAL], NumArgs "2" $ length x)
+def env [x, _] = Eval $ ES.throw $ TypeMismatch [fromEno eINVAL] "string" x
+def env x = Eval $ ES.throw $ NumArgs [fromEno eINVAL] "2" $ length x
 
 def' :: Env -> T.Text -> Val -> Eval Env
 def' env name body = do
@@ -613,7 +615,7 @@ read'' t delNL nChar sep env xs =
                    '\n' -> delNewLn $ T.init c
                    _    -> c
 
-glob env [] = return env
+glob env [] = return env{status=True}
 glob env xs = do
   s <- mapM (expand env) xs
   p <- liftIO $ mapM ((\x -> globDir1' x (dir env)) . T.unpack) s
@@ -645,33 +647,35 @@ usplit env [List x] = do
   return env{status=True, ret=[toStr $ T.unwords z]}
 usplit env _ = usagePrint "usep"
 
-fork env xs = do
-  liftIO $ E.mask_ $ do
-    hs <- signalHandleClear
-    pid <- P.forkProcessWithUnmask $ \m -> do
-      signalHandleClear
+fork env xs = liftIO $ do
+--  h <- installHandler 2 (ctrlC env) Nothing
+  pid <- ES.mask_ $ do
+--    hs <- signalHandleClear
+    P.forkProcessWithUnmask $ \u -> do
       P.getProcessID >>= P.createProcessGroupFor
       tinfo <- allocThreadInfo
-      runEvalMain env{thread=tinfo} (eval xs env{thread=tinfo}) >>= exitEval
+      signalHandleClear
+      u $ runEvalMain env{thread=tinfo} (eval xs env{thread=tinfo}) >>= exitEval
 --    signalHandleRestore hs
-    return env {status=True, ret=[]}
+--  installHandler 2 h Nothing
+  return env {status=True, ret=[toFloat pid]}
 
 timeo env ys@(x:xs) = do
   n <- getFloat x
   if n <= 0 then
-    Eval $ throwError ([fromEno eNOENT], SomeError $ show n ++ " is not positive number")
+    Eval $ ES.throw $ SomeError [fromEno eNOENT] $ show n ++ " is not positive number"
   else do
     y <- liftIO $ timeout (floor $ n*1000000) $ runEval env $ eval xs env
     case y of
       Just (Right renv) -> return $ setRetEnv env renv
-      Just (Left e)     -> Eval $ throwError e
+      Just (Left e)     -> Eval $ ES.throw e
       Nothing           -> return env{status=False, ret=[]}
 
 land env i xs = do
   x <- liftIO $ runEvalJump env i $ eval xs env{jumpID=i}
   case x of
     Right renv -> return renv
-    Left e     -> Eval $ throwError e
+    Left e     -> Eval $ ES.throw e
 
 not' env x = do
   renv <- eval x env
@@ -740,7 +744,7 @@ fold'' foldFn env xs = case xs of
   _ -> usagePrint "fold"
 
 foldM' :: (Env -> Val -> Eval Env) -> Env -> [Val] -> Eval Env
-foldM' _ env [] = return env
+foldM' _ env [] = return env{status=True}
 foldM' f env (x:xs) = do
   y <- case x of
          List ys ->
@@ -766,7 +770,7 @@ lenc env xs = do
   l <- mapM (\x->toFloat . T.length <$> expand env x) xs
   return env{status=True, ret=l}
 
-getenv env [] = return env
+getenv env [] = return env{ret=[], status=True}
 getenv env (x:xs) = do
   t <- expand env x
   y <- case t of
@@ -774,30 +778,38 @@ getenv env (x:xs) = do
          "PPID" -> toFloat <$> liftIO P.getParentProcessID
          _ -> toStr . T.pack <$> liftIO (getEnv (T.unpack t))
   renv <- getenv env xs
-  return renv{status=True, ret=y:ret renv}
+  return renv{ret=y:ret renv}
 
 setenv env xs@[_, _] = do
   [n, v] <- map T.unpack <$> mapM (expand env) xs
   liftIO $ setEnv n v
   return env{status=True, ret=[toStr $ T.pack v]}
-setenv env x = Eval $ throwError ([fromEno eINVAL], NumArgs "2" $ length x)
+setenv env x = Eval $ ES.throw $ NumArgs [fromEno eINVAL] "2" $ length x
 
 loop env i (Str _ "-n":x) = loop' env x
 loop env i x = do
   y <- liftIO $ runEvalJump env i $ loop' env{jumpID=i} x
   case y of
     Right renv -> return $ setRetEnv env renv
-    Left e     -> Eval $ throwError e
+    Left e     -> Eval $ ES.throw e
 
 loop' env x@(cmd:arg) = do
   y <- liftIO $ runEvalFunc env $ eval x env
   case y of
     Right renv -> loop' env (cmd:ret renv)
-    Left e     -> Eval $ throwError e
+    Left e     -> Eval $ ES.throw e
 
 trap env [] = usagePrint "trap"
+trap env (Str _ "-d":ys) = utrap env ys
 trap env (Str _ "-a":ys) = trap' True env ys
 trap env ys = trap' False env ys
+
+utrap env ys = do
+  singnals <- case ys of
+                [] -> return defaultSignal
+                _  -> mapM txSignal ys
+  liftIO $ signalHandleClear' singnals
+  return env{status=True, ret=[]} 
 
 trap' aopt env (f:ys) = do
   singnals <- case ys of
@@ -834,14 +846,15 @@ trap' aopt env (f:ys) = do
       tinfo <- readIORef $ thread env
       let ThreadInfo tid exitMvar (Just cmdMvar) _ = tinfo in
         case x of
-          Left (v, Exited s) -> do
-            putMVar exitMvar env{status=s, ret=v}
-            throwTo tid E.ThreadKilled
+          Left e@Exited{} -> do
+            putMVar exitMvar $ setErrEnv env e
+            ES.throwTo tid E.ThreadKilled
           _ -> putMVar cmdMvar ()
-    txSignal (Str _ s) =
-      case H.lookup s signalMap of
-        Just x -> return x
-        _ -> Eval $ throwError ([fromEno eINVAL], SomeError $ show s ++ " is not signal")
+
+txSignal (Str _ s) =
+  case H.lookup s signalMap of
+    Just x -> return x
+    _ -> Eval $ ES.throw $ SomeError [fromEno eINVAL] $ show s ++ " is not signal"
 
 data Val = Float Double
          | Str (Maybe(IORef Cache)) T.Text
@@ -971,7 +984,7 @@ getVar :: Env -> VarT -> Eval Val
 getVar _ (VarN "~") = toStr . T.pack <$> liftIO (getEnv "HOME")
 getVar e v = case getVarMaybe e v of
                Just val -> return val
-               _        -> Eval $ throwError ([fromEno ePERM], UnboundVar (show v))
+               _        -> Eval $ ES.throw $ UnboundVar [fromEno ePERM] $ show v
 
 getVarMaybe :: Env -> VarT -> Maybe Val
 getVarMaybe env (VarA (-1)) = Just $ List $ args env
@@ -1003,7 +1016,7 @@ expand env (FD x) = return $ "&" `T.append` TS.showt x
 --expand env (Lambda _ (Just fenv) vs) = return "{LAMBDA}"
 expand env (List vs) = T.unwords <$> mapM (expand env) vs
 expand env (Dict d) = T.unwords <$> mapM (expand env) (dictToList d)
-expand env x = Eval $ throwError ([fromEno eINVAL], TypeMismatch "expandable value" x)
+expand env x = Eval $ ES.throw $ TypeMismatch [fromEno eINVAL] "expandable value" x
 
 expandL :: Env -> Val -> Eval [T.Text]
 --expandL env (Lambda _ (Just fenv) vs) = return ["{LAMBDA}"]
@@ -1021,9 +1034,9 @@ getInt (Str _ s) = case (TR.signed TR.rational) s of
                      Right (f, "") -> return $ floor f
                      _ -> case (TR.signed TR.hexadecimal) s of
                        Right (d, "") -> return d
-                       _ -> Eval $ throwError ([], SomeError $
-                            show s ++ " cannot be read as number")
-getInt x = Eval $ throwError ([fromEno eINVAL], SomeError $ show x ++ " cannot be read as number")
+                       _ -> Eval $ ES.throw $ SomeError [] $
+                            show s ++ " cannot be read as number"
+getInt x = Eval $ ES.throw $ SomeError [fromEno eINVAL] $ show x ++ " cannot be read as number"
 
 readInt :: Val -> Maybe Int
 readInt x =
@@ -1043,31 +1056,45 @@ data LambdaType = Normal
                 | PipeWt
   deriving Eq
 
-data ShError = Returned     Bool
-             | Exited       Bool
-             | Jump         Bool Int
-             | SomeError    String
-             | NumArgs      String Int
-             | TypeMismatch String Val
-             | UnboundVar   String
-             | Internal     String
+data ShError = Returned     [Val] Bool
+             | Exited       [Val] Bool
+             | Jumped       [Val] Bool Int
+             | SomeError    [Val] String
+             | NumArgs      [Val] String Int
+             | TypeMismatch [Val] String Val
+             | UnboundVar   [Val] String
+             | Internal     [Val] String
 instance Show ShError where
-  show (SomeError    s)   = s
-  show (Internal     s)   = "Internal error: " ++ s
-  show (NumArgs      s n) = "Expected " ++ s ++ " args, found values " ++ show n
-  show (TypeMismatch s v) = "Invalid type: expected " ++ s ++ ", found " ++ show v
-  show (UnboundVar   t)   = "Getting an unbound variable: " ++ t
+  show (SomeError    _ s)   = s
+  show (Internal     _ s)   = "Internal error: " ++ s
+  show (NumArgs      _ s n) = "Expected " ++ s ++ " args, found values " ++ show n
+  show (TypeMismatch _ s v) = "Invalid type: expected " ++ s ++ ", found " ++ show v
+  show (UnboundVar   _ t)   = "Getting an unbound variable: " ++ t
+  show (Returned{})         = "Returned" 
+  show (Exited{}  )         = "Exited" 
+  show (Jumped{}  )         = "Jumped" 
 
-newtype Eval a = Eval (ExceptT ([Val], ShError) IO a)
+instance Exception ShError
+
+setErrEnv env (Returned     vs s)   = env{ret=vs, status=s}  
+setErrEnv env (Exited       vs s)   = env{ret=vs, status=s}    
+setErrEnv env (Jumped       vs s _) = env{ret=vs, status=s}  
+setErrEnv env (SomeError    vs s)   = env{ret=vs, status=False}   
+setErrEnv env (NumArgs      vs s _) = env{ret=vs, status=False} 
+setErrEnv env (TypeMismatch vs s _) = env{ret=vs, status=False} 
+setErrEnv env (UnboundVar   vs s)   = env{ret=vs, status=False}     
+setErrEnv env (Internal     vs s)   = env{ret=vs, status=False}   
+
+newtype Eval a = Eval (ExceptT ShError IO a)
   deriving (Functor,
             Applicative,
             Monad,
             MonadIO,
-            MonadError ([Val], ShError))
+            MonadError ShError)
 
-throwShError :: Env -> ([Val], ShError) -> Eval a
-throwShError env (v, e) = do liftIO $ hPrint (err env) (show e)
-                             Eval $ throwError (v, e)
+throwShError :: Env -> ShError -> Eval a
+throwShError env e = do liftIO $ hPrint (err env) e
+                        Eval $ ES.throw e
 
 --
 -- parser
@@ -1323,20 +1350,20 @@ pureDispatch env (Str r s:args) = do
              Just fn -> do
                liftIO $ writeIORef x $ Cache (funID env) fn
                pureDispatch env (fn:args)
-             _ -> Eval $ throwError ([fromEno eINVAL], SomeError "not a pure function")
+             _ -> Eval $ ES.throw $ SomeError [fromEno eINVAL] $ "not a pure function"
     _ -> do 
       funcs <- liftIO $ readIORef $ funcs env
       case H.lookup s funcs of
         Just fn -> pureDispatch env (fn:args)
-        _ -> Eval $ throwError ([fromEno eINVAL], SomeError "not a pure function")
-pureDispatch _ _ = Eval $ throwError ([fromEno eINVAL], SomeError "not a pure function")
+        _ -> Eval $ ES.throw $ SomeError [fromEno eINVAL] $ "not a pure function"
+pureDispatch _ _ = Eval $ ES.throw $ SomeError [fromEno eINVAL] $ "not a pure function"
 
 --evalMac :: Env -> Val -> [Val] -> Eval Env
 --evalMac env (Lambda Normal _ body) arg = do
 --  renv <- body env{args=arg}
 --  return renv{args=args renv}
 --evalMac env (Lambda NoArgs _ body) args = body env
---evalMac env x args = Eval $ throwError ([fromEno eINVAL], TypeMismatch "functon" x)
+--evalMac env x args = Eval $ ES.throw $ TypeMismatch [fromEno eINVAL] $ "functon" x
 
 evalFn :: Env -> Val -> [Val] -> Eval Env
 evalFn env (Lambda mode penv fenv body) arg = do
@@ -1346,7 +1373,7 @@ evalFn env (Lambda mode penv fenv body) arg = do
                                                else genv{args=arg}
   case x of
     Right renv -> return $ setRetEnv env renv
-    Left e     -> Eval $ throwError e
+    Left e     -> Eval $ ES.throw e
 evalFn env (Prim _ fn usage) args = fn env args
 
 genFuncEnv :: Env -> ParseEnv -> Maybe Env -> Eval Env
@@ -1383,12 +1410,21 @@ cmdExec c cs env = (do
               Just mvar -> takeMVar mvar >> return env{status=False, ret=[toFloat ret]}
               _ -> return env{status=False, ret=[toFloat ret]}
           else return env{status=False, ret=[toFloat ret]}
-    ) `catchError` (errHandlerIO env)
+    ) `ES.catch` (errHandlerIO env)
 
-errHandlerIO' printMsg f env e = do if printMsg then hPrint (err env) e
-                                                else return ()
-                                    n <- getErrno
-                                    return $ f env{status=False, ret=[fromEno n]}
+-- errHandlerIO' printMsg f env e = do if printMsg then hPrint (err env) e
+--                                                 else return ()
+--                                     n <- getErrno
+--                                     return $ f env{status=False, ret=[fromEno n]}
+-- 
+-- errHandlerIO = errHandlerIO' True id
+
+errHandlerIO' :: Bool -> (Env -> a) -> Env -> ES.IOException -> IO a
+errHandlerIO' printMsg f env e = do
+  if printMsg then hPrint (err env) e
+              else return ()
+  n <- getErrno
+  return $ f env{status=False, ret=[fromEno n]}
 
 errHandlerIO = errHandlerIO' True id
 
@@ -1399,7 +1435,7 @@ errHandlerIO = errHandlerIO' True id
 wordlist :: Env -> IO [String]
 wordlist env = do
   p <- getEnv "PATH"
-  c <- mapM (\x -> listDirectory x `catchError` (\e->return [])) $ S.splitOn ":" p
+  c <- mapM (\x -> listDirectory x `ES.catchIOError` (\_->return [])) $ S.splitOn ":" p
   funcs <- readIORef $ funcs env
   return $ nub $ concat c ++ map T.unpack (H.keys funcs)
 
@@ -1448,7 +1484,7 @@ repl home pref env str = do
   e <- fileExist $ home </> ".snalerc"
   renv <- if e 
             then runEvalMain env (load env [toStr $ T.pack $ home </> ".snalerc"])
-                   `E.catch` killThreadHandler env
+                   `ES.catch` killThreadHandler env
             else return env
   tryloop home renv >>= exitEval . fst
   return ()
@@ -1495,58 +1531,58 @@ repl home pref env str = do
                 mergeLines y x  = y`T.append`x`T.append`"\n"
 
 
-runEval :: Env -> Eval Env -> IO (Either ([Val], ShError) Env)
-runEval env (Eval fn) = runExceptT $ catchError fn $ handler env
+runEval :: Env -> Eval Env -> IO (Either ShError Env)
+runEval env (Eval fn) = runExceptT $ ES.catch fn $ handler env
   where
-    handler :: Env -> ([Val], ShError) -> ExceptT ([Val], ShError) IO Env
-    handler env e@(v, Returned s) = throwError e
-    handler env e@(v, Jump{})     = throwError e
-    handler env e@(v, Exited s)   = throwError e
-    handler env e                 = ignoreError env e
+    handler :: Env -> ShError -> ExceptT ShError IO Env
+    handler env e@Returned{} = ES.throw e
+    handler env e@Jumped{}   = ES.throw e
+    handler env e@Exited{}   = ES.throw e
+    handler env e            = ignoreError env e
 
-runEvalTry :: Env -> Eval Env -> IO (Either ([Val], ShError) Env)
-runEvalTry env (Eval fn) = runExceptT $ catchError fn $ handler env
+runEvalTry :: Env -> Eval Env -> IO (Either ShError Env)
+runEvalTry env (Eval fn) = runExceptT $ ES.catch fn $ handler env
   where
-    handler :: Env -> ([Val], ShError) -> ExceptT ([Val], ShError) IO Env
-    handler env e@(v, Returned s) = throwError e
-    handler env e@(v, Jump{})     = throwError e
-    handler env e@(v, Exited s)   = throwError e
-    handler env (v, e) = return env{status=False, ret=v}
+    handler :: Env -> ShError -> ExceptT ShError IO Env
+    handler env e@Returned{} = ES.throw e
+    handler env e@Jumped{}   = ES.throw e
+    handler env e@Exited{}   = ES.throw e
+    handler env e = return $ setErrEnv env e
 
-runEvalFunc :: Env -> Eval Env -> IO (Either ([Val], ShError) Env)
-runEvalFunc env (Eval fn) = runExceptT $ catchError fn $ handler env
+runEvalFunc :: Env -> Eval Env -> IO (Either ShError Env)
+runEvalFunc env (Eval fn) = runExceptT $ ES.catch fn $ handler env
   where
-    handler :: Env -> ([Val], ShError) -> ExceptT ([Val], ShError) IO Env
-    handler env (v, Returned s) = return env{status=s, ret=v}
-    handler env e@(v, Jump{})   = throwError e
-    handler env e@(v, Exited s) = throwError e
-    handler env e               = ignoreError env e
+    handler :: Env -> ShError -> ExceptT ShError IO Env
+    handler env e@Returned{} = return $ setErrEnv env e
+    handler env e@Jumped{}   = ES.throw e
+    handler env e@Exited{}   = ES.throw e
+    handler env e            = ignoreError env e
 
-runEvalJump :: Env -> Int -> Eval Env -> IO (Either ([Val], ShError) Env)
-runEvalJump env id (Eval fn) = runExceptT $ catchError fn $ handler env
+runEvalJump :: Env -> Int -> Eval Env -> IO (Either ShError Env)
+runEvalJump env id (Eval fn) = runExceptT $ ES.catch fn $ handler env
   where
-    handler :: Env -> ([Val], ShError) -> ExceptT ([Val], ShError) IO Env
-    handler env e@(v, Returned s) = throwError e
-    handler env e@(v, Jump s i)   = if i == id then return env{status=s, ret=v}
-                                               else throwError e
-    handler env e@(v, Exited s)   = throwError e
-    handler env e                 = ignoreError env e
+    handler :: Env -> ShError -> ExceptT ShError IO Env
+    handler env e@Returned{}     = ES.throw e
+    handler env e@(Jumped _ _ i) = if i == id then return $ setErrEnv env e
+                                              else ES.throw e
+    handler env e@Exited{}       = ES.throw e
+    handler env e                = ignoreError env e
 
-ignoreError :: Env -> ([Val], ShError) -> ExceptT ([Val], ShError) IO Env
-ignoreError env e@(v, x) = if ignoreInterpreterError $ flags env
-                             then liftIO (hPrint (err env) x) >> return env{status=False, ret=v}
-                             else throwError e
+ignoreError :: Env -> ShError -> ExceptT ShError IO Env
+ignoreError env e= if ignoreInterpreterError $ flags env
+                     then liftIO (hPrint (err env) e) >> return (setErrEnv env e)
+                     else ES.throw e
 
 runEvalMain :: Env -> Eval Env -> IO Env
 runEvalMain env (Eval fn) = do
-  Right x <- runExceptT $ catchError fn $ handler env
-  return x
+  Right x <- runExceptT $ ES.catch fn $ handler env
+  return env
   where
-    handler :: Env -> ([Val], ShError) -> ExceptT ([Val], ShError) IO Env
-    handler env (v, Returned s) = return env{status=s, ret=v}
-    handler env (v, Jump s _) = return env{status=s, ret=v}
-    handler env (v, Exited s) = return env{status=s, ret=v}
-    handler env (v, e) = liftIO (hPrint (err env) e) >> return env{status=False, ret=v}
+    handler :: Env -> ShError -> ExceptT ShError IO Env
+    handler env e@Returned{} = return $ setErrEnv env e 
+    handler env e@Jumped{}   = return $ setErrEnv env e 
+    handler env e@Exited{}   = return $ setErrEnv env e 
+    handler env e = liftIO (hPrint (err env) e) >> return (setErrEnv env e)
 
 killThreadHandler env E.ThreadKilled = do
   tinfo <- readIORef $ thread env
@@ -1554,7 +1590,7 @@ killThreadHandler env E.ThreadKilled = do
   case x of
     Just renv -> return renv
     _         -> return env{status=False, ret=[Float 130]}
-killThreadHandler env e = E.throw e
+killThreadHandler env e = ES.throw e
 
 allocThreadInfo :: IO (IORef ThreadInfo)
 allocThreadInfo = do
@@ -1562,18 +1598,16 @@ allocThreadInfo = do
   exitMvar <- newEmptyMVar
   newIORef $ ThreadInfo tid exitMvar Nothing []
 
-signalHandleClear :: IO [Handler]
-signalHandleClear =
-  mapM (\x -> installHandler x Default Nothing)
-    $ filter (\x -> not $ x == 0 || x == 9 || x == 19 || not (inSignalSet x fullSignalSet))
-    $ H.elems signalMap
+signalHandleClear :: IO [(Signal, Handler)]
+signalHandleClear = signalHandleClear' $ H.elems signalMap
 
-signalHandleRestore :: [Handler] -> IO [Handler]
-signalHandleRestore h =
-  mapM (\(x, y)-> installHandler y x Nothing)
-    $ zip h
-    $ filter (\x -> not $ x == 0 || x == 9 || x == 19 || not (inSignalSet x fullSignalSet))
-    $ H.elems signalMap
+signalHandleClear' s = zip ss <$> mapM (\x -> installHandler x Default Nothing) ss
+  where
+    ss = filter (\x -> not (x == 0 || inSignalSet x reservedSignals)) s
+--    ss = filter (\x -> not (x == 0 || x == 2 || inSignalSet x reservedSignals)) s
+
+signalHandleRestore :: [(Signal, Handler)] -> IO [Handler]
+signalHandleRestore = mapM (\(x, y)-> installHandler x y Nothing)
 
 options = [ Option ['c'] ["command"] (ReqArg id "COMMAND...") "command line" ]
 
@@ -1596,11 +1630,16 @@ exitEval env = do
                | otherwise -> P.exitImmediately $ ExitFailure n
         _ -> P.exitImmediately $ ExitFailure $ toInt ePERM
 
+getSignalHandler s = do
+  h <- installHandler s Default Nothing
+  installHandler s h Nothing
+  return h
+
 main :: IO ()
 main = do
   hSetBuffering stdout NoBuffering
   hSetBuffering stderr NoBuffering
-  env <- defaultEnv <$> getCurrentDirectory <*> newIORef defaultFuncs <*> allocThreadInfo <*> newIORef 0
+  env <- defaultEnv <$> getCurrentDirectory <*> newIORef defaultFuncs <*> allocThreadInfo <*> newIORef 0 -- <*> getSignalHandler 2
   args <- getArgs
   case args of
     [] -> do
@@ -1616,7 +1655,7 @@ main = do
            (_, file:args, []) -> do
              renv <- runEvalMain env (
                        load env{args=map (toStr . T.pack) args} [toStr $ T.pack file])
-                       `E.catch` killThreadHandler env
+                       `ES.catch` killThreadHandler env
              exitEval renv
            (_, _, es)   -> putStrLn (concat es) >> exitWith (ExitFailure $ toInt eINVAL)
 
@@ -1717,7 +1756,7 @@ spawn env cmd = liftIO $ do
 switch f g e = do
   re <- f e
   if status re then do re2 <- g re
-                       Eval $ throwError (ret re2, Returned $ status re2)
+                       Eval $ ES.throw $ Returned (ret re2) $ status re2
                else return re
 
 para f g e = do
@@ -1734,7 +1773,7 @@ evalIf f g e = do
   x <- liftIO $ runEvalTry e $ f e
   re <- case x of
     Right re -> return re
-    Left e -> Eval $ throwError e
+    Left e -> Eval $ ES.throw e
   if status re then setRetEnv re <$> g re
                else return re
 
@@ -1742,7 +1781,7 @@ evalElse f g e = do
   x <- liftIO $ runEvalTry e $ f e
   re <- case x of
     Right re -> return re
-    Left e -> Eval $ throwError e
+    Left e -> Eval $ ES.throw e
   if status re then return re
                else setRetEnv re <$> g re
 
@@ -1750,7 +1789,7 @@ evalNull f g e = do
   x <- liftIO $ runEvalTry e $ f e
   re <- case x of
     Right re -> return re
-    Left e -> Eval $ throwError e
+    Left e -> Eval $ ES.throw e
   if null $ ret re then setRetEnv re <$> g re
                    else return re
 
@@ -1758,7 +1797,7 @@ evalElseNull f g e = do
   x <- liftIO $ runEvalTry e $ f e
   re <- case x of
     Right re -> return re
-    Left e -> Eval $ throwError e
+    Left e -> Eval $ ES.throw e
   if null $ ret re then
     setRetEnv re <$> g re
   else if status re then
@@ -1771,6 +1810,7 @@ genNL f g e = f e >>= g
 genCmd :: Parser (Env -> Eval Env)
 genCmd = do s <- get
             put $ s{addArg=id}
+            brank
             (rds, cmd) <- partition isRd <$> many (andSpace $ parseWord "" <|> try parseRedirect)
             genRd rds <$> genCmd' ((addArg s) cmd)
 
@@ -1814,8 +1854,8 @@ genExpr' (c@(Lambda Purely _ _ _):cs) = return $ \e -> valExpand e cs >>= evalFn
 genExpr' (c@(Lambda{}):cs) = throwSyntax $ NotPureFunc "it"
 genExpr' [x] = return $ \e->do y <- valExpand e [x]
                                case y of
-                                 [] -> Eval $ throwError ([], SomeError $
-                                         "expect single value but " ++ show x ++ " is empty")
+                                 [] -> Eval $ ES.throw $ SomeError [] $
+                                         "expect single value but " ++ show x ++ " is empty"
                                  Bool b:_ -> return e{status=b, ret=y}
                                  _ -> return e{status=True, ret=y}
 genExpr' xs@(Str _ s:cs) = case H.lookup s defaultFuncs of
@@ -1852,7 +1892,7 @@ parseRedirect = (string "<" >> ((string "[2]" >> copyHandle (\e h->e{inn=h}) err
                                      z <- liftIO $ withFile file m $ \h->runEval e $ cmd (f e h)
                                      case z of
                                        Right re -> return $ sethandles re e
-                                       Left e   -> Eval $ throwError e)
+                                       Left e   -> Eval $ ES.throw e)
 
 parseWord :: String -> Parser Val
 parseWord b = do
@@ -2053,14 +2093,13 @@ getFloat (Str _ s) = case (TR.signed TR.rational) s of
                      Right (d, "") -> return d
                      _ -> case (TR.signed TR.hexadecimal) s of
                        Right (d, "") -> return $ fromIntegral d
-                       _ -> Eval $ throwError ([], SomeError $
-                            show s ++ " cannot be read as number")
-getFloat x = Eval $ throwError ([], SomeError $
-                 show x ++ " cannot be read as number")
+                       _ -> Eval $ ES.throw $ SomeError [] $
+                              show s ++ " cannot be read as number"
+getFloat x = Eval $ ES.throw $ SomeError [] $ show x ++ " cannot be read as number"
 
 getBool :: Val -> Eval Bool
 getBool (Bool x) = return x
-getBool x = Eval $ throwError ([fromEno eINVAL], TypeMismatch "bool" x)
+getBool x = Eval $ ES.throw $ TypeMismatch [fromEno eINVAL] "bool" x
 
 getStr :: Val -> String
 getStr (Str _ x) = T.unpack x

@@ -41,9 +41,10 @@ executables:
     - -with-rtsopts=-N
     - -XStrictData
     - -XStrict
-    - -O3
+#    - -O3
     dependencies:
     - snale
+    - safe-exceptions
     - temporary
     - unordered-containers
     - scientific
