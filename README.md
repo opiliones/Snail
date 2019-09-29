@@ -651,6 +651,10 @@ There are several new syntax to import the concept of functional programing.
 ## combinators
 * ;;  
   This combinator appends right command's return values to left command's return values.
+  ```
+  @ (1+1) ;; (1+2) $$ echo
+  2 3
+  ```
 * $$  
   This combinator passes all left command's return values to right command,
   but when there is no return value, it does not execute right command.
@@ -659,10 +663,17 @@ There are several new syntax to import the concept of functional programing.
   the right command is passed argument from one of the left command's return values.
 * $&  
   This combinator passes the argument to right command from the first left command's return values.
-  When return status of left command is failure, it does not execute right command.
+  When return status of left command is failure or no return value, it does not execute right command.
 * $|  
   This combinator passes the argument to right command from the first left command's return values.
-  When return status of left command is success, it does not execute right command.
+  When return status of left command is success or no return value, it does not execute right command.
+  ```
+  @ false 1 $| echo
+  1
+  @ false $| echo
+  @ true 1 $| echo
+  @
+  ```
 * $>  
   This combinator passes all left command's return values to right command.
 * $.  
@@ -679,6 +690,13 @@ There are several new syntax to import the concept of functional programing.
 * &  
   This combinator executes both commands parallelly,
   and waits all the commands finish.
+  ```
+  @ date
+  Sun Sep 29 22:20:37 JST 2019
+  @ sleep 5 & sleep 3
+  @ date
+  Sun Sep 29 22:20:42 JST 2019
+  ```
 * !!  
   This combinator executes right command only when left command's return value is null.
 * |!  
