@@ -647,4 +647,39 @@ There are several new syntax to import the concept of functional programing.
 * usage  
   This command shows usage the command specified at the argument.
   When no argument is specified, it shows list of all built-in functions.
-
+  
+## combinators
+* ;;  
+  This combinator appends right command's return values to left command's return values.
+* $$  
+  This combinator passes all left command's return values to right command,
+  but when there is no return value, it does not execute right command.
+* $:  
+  This combinator executes right command for each left command's return value.
+  the right command is passed argument from one of the left command's return values.
+* $&  
+  This combinator passes the argument to right command from the first left command's return values.
+  When return status of left command is failure, it does not execute right command.
+* $|  
+  This combinator passes the argument to right command from the first left command's return values.
+  When return status of left command is success, it does not execute right command.
+* $>  
+  This combinator passes all left command's return values to right command.
+* $.  
+  This combinator take first left command's return value for the command,
+  and it executes the command, giving right words for arguments.
+* $  
+  This combinator passes first left command's return value to right command.
+* &&&  
+  When left command returns succesfully, this combinator executes right command,
+  and exit corrent closure.
+* |||  
+  When left command returns not succesfully, this combinator executes right command,
+  and exit corrent closure.
+* &  
+  This combinator executes both commands parallelly,
+  and waits all the commands finish.
+* !!  
+  This combinator executes right command only when left command's return value is null.
+* |!  
+  This combinator executes right command when left command's return value is null or return status is failure.
