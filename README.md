@@ -584,7 +584,7 @@ There are several new syntax to import the concept of functional programing.
 * sub  
   ```
   @ sub "[aA]*" @ snail_SNAIL $ echo
-  sn@le_SN@LE
+  sn@il_SN@IL
   ```
 * timeo  
   It works like timeout command.
