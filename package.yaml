@@ -30,7 +30,7 @@ library:
   - unordered-containers
 
 executables:
-  snail-exe:
+  snail:
     main:                Main.hs
     source-dirs:         app
     ghc-options:
