@@ -1,4 +1,4 @@
-name:                snale
+name:                snail
 version:             0.1.0.0
 github:              "githubuser/snale"
 license:             BSD3
@@ -27,11 +27,10 @@ library:
   dependencies:
   - unix
   - text
-  - containers
   - unordered-containers
 
 executables:
-  snale-exe:
+  snail-exe:
     main:                Main.hs
     source-dirs:         app
     ghc-options:
@@ -41,38 +40,32 @@ executables:
     - -with-rtsopts=-N
     - -XStrictData
     - -XStrict
-#    - -O3
+    - -O3
+#    - -dynamic
     dependencies:
-    - snale
+    - snail
     - safe-exceptions
     - temporary
     - unordered-containers
     - scientific
-    - parsec
     - process
     - directory
     - haskeline
-    - io-streams
     - bytestring
     - unix
     - filepath
-    - containers
     - mtl
-    - either
     - text
     - megaparsec
     - debug
     - regex-posix
-    - repline
     - split
     - Glob
     - transformers
     - text-show
-    - utf8-string
-#    - hashmap
 
 tests:
-  snale-test:
+  snail-test:
     main:                Spec.hs
     source-dirs:         test
     ghc-options:
@@ -80,4 +73,4 @@ tests:
     - -rtsopts
     - -with-rtsopts=-N
     dependencies:
-    - snale
+    - snail
