@@ -187,7 +187,7 @@ There are several new syntax to import the concept of functional programing.
   ```
   
 * Command substitution  
-  Snale does not have command substitution syntax.
+  Snail does not have command substitution syntax.
   Instead, read builtin command returns string.
   ```
   @ yes | head -n3 | read -a
@@ -583,7 +583,7 @@ There are several new syntax to import the concept of functional programing.
   ```
 * sub  
   ```
-  @ sub "[aA]*" @ snail_SNALE $ echo
+  @ sub "[aA]*" @ snail_SNAIL $ echo
   sn@le_SN@LE
   ```
 * timeo  
