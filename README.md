@@ -68,7 +68,7 @@ There are several new syntax to import the concept of functional programing.
   a
   @ ech a >[2] a
   @ cat - <a
-  ech: snale: runInteractiveProcess: exec: does not exist (No such file or directory)
+  ech: snail: runInteractiveProcess: exec: does not exist (No such file or directory)
   ```
 
 * Non-linear pipe
@@ -100,7 +100,7 @@ There are several new syntax to import the concept of functional programing.
   @ {echo a; ech} >[2=1] a
   @ cat a
   a
-  ech: snale: runInteractiveProcess: exec: does not exist (No such file or directory)
+  ech: snail: runInteractiveProcess: exec: does not exist (No such file or directory)
   @ {echo a; ech} >[1=2] /dev/null
   @ {echo a; ech} >[1<>2] | grep echo
   a
@@ -444,18 +444,18 @@ There are several new syntax to import the concept of functional programing.
   When exiting from closure, these files are removed.
   ```
   @ tmpf @{ls $1; : $1}
-  /tmp/snale2371-1
+  /tmp/snail2371-1
   @ ls $?
-  ls: cannot access '/tmp/snale2371-1': No such file or directory
+  ls: cannot access '/tmp/snail2371-1': No such file or directory
   ```
 * tmpd  
   This command makes temporary directory and pass the files to the closure as argument.
   When exiting from closure, the directory is removed.
   ```
   @ tmpd @{ls -ld $1; : $1}
-  drwx------ 2 root root 4096 Sep 21 23:28 /tmp/snale-146e51aa74ac0b46
+  drwx------ 2 root root 4096 Sep 21 23:28 /tmp/snail-146e51aa74ac0b46
   @ ls $?
-  ls: cannot access '/tmp/snale-146e51aa74ac0b46': No such file or directory
+  ls: cannot access '/tmp/snail-146e51aa74ac0b46': No such file or directory
   ```
 * chk  
   This command has file check parts of test command functions.
@@ -583,7 +583,7 @@ There are several new syntax to import the concept of functional programing.
   ```
 * sub  
   ```
-  @ sub "[aA]*" @ snale_SNALE $ echo
+  @ sub "[aA]*" @ snail_SNALE $ echo
   sn@le_SN@LE
   ```
 * timeo  
@@ -635,7 +635,7 @@ There are several new syntax to import the concept of functional programing.
   This command executes glob expansion by argument values.
   ```
   @ glob * .* $> echo
-  app snale.cabal package.yaml README.md LICENSE test ChangeLog.md src stack.yaml . .gitignore .stack-work .git ..
+  app snail.cabal package.yaml README.md LICENSE test ChangeLog.md src stack.yaml . .gitignore .stack-work .git ..
   ```
 * shift  
   Unlike sh, this command returns values removed.
