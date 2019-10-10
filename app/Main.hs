@@ -1024,10 +1024,6 @@ throwShError :: Env -> ShError -> Eval a
 throwShError env e = do liftIO $ hPrint (err env) e
                         Eval $ ES.throw e
 
---
--- parser
---
-
 data ParseEnv = ParseEnv {allocCount  :: Int
                         , addArg      :: [Val] -> [Val]
                         , defFn       :: HS.HashSet T.Text
@@ -1099,10 +1095,6 @@ chkParseErr = do x <- get
                  maybe (return ()) customFailure $ isErr x
 
 type Parser = ParsecT Custom T.Text (StateT ParseEnv IO)
-
---
--- eval
---
 
 eval = eval' normalDispatch
 evalPure = eval' pureDispatch
@@ -1312,10 +1304,6 @@ errHandlerIO' printMsg f env e = do
 
 errHandlerIO = errHandlerIO' True id
 
---
--- completion
---
-
 wordlist :: Env -> IO [String]
 wordlist env = do
   p <- getEnv "PATH"
@@ -1358,10 +1346,6 @@ isArg s =
 
 completeFn :: Env -> CompletionFunc IO
 completeFn env = completeQuotedWord (Just '\\') "'" listFiles $ unquotedCompleteFn env
-
---
--- main ~ repl
---
 
 repl :: FilePath -> Prefs -> Env -> String -> IO ()
 repl home pref env str = do
