@@ -1757,7 +1757,7 @@ parseWord b = do
 lineComment :: Parser T.Text
 lineComment = comment >> symbol spaces "\n"
 
-comment = char '#' >> skipMany (notChar '\n')
+comment = string "# " >> skipMany (notChar '\n')
 
 parseDoller :: Parser Val
 parseDoller = try $ do
@@ -1820,9 +1820,9 @@ genLambda t f = do p1 <- get
         takeJust _ x@(Just _) = x
         takeJust x _          = x
 
-parseList = List <$> between (symbol brank "[") (string "]" <?> "square bracket") (many $ andBrank $ parseWord "")
+parseList = List <$> between (symbol brank "[") (string "]") (many $ andBrank $ parseWord "")
 
-parseDict = DList <$> between (symbol brank "#[") (string "]" <?> "square bracket") (many $ andBrank $ parseWord "")
+parseDict = DList <$> between (symbol brank "#[") (string "]") (many $ andBrank $ parseWord "")
 
 parseSym :: String -> Parser Val
 parseSym b = do
@@ -1873,7 +1873,7 @@ genExpr = try (makeExprParser (((\f e->return e{status=True, ret=[Float f]}) <$>
           throwSyntax $ InvalidFormat fmt
 
     parseWord b = do
-      xs <- some $ parseClsr <|> parseList <|> parseDoller <|> parseSym b <|> parseStr
+      xs <- some $ parseClsr <|> parseList <|> parseDict <|> parseDoller <|> parseSym b <|> parseStr
       return $ case xs of
         [y] -> y
         _   -> LinkedStr xs
