@@ -24,7 +24,7 @@ import           Data.Maybe
 import qualified Data.Text                  as T
 import qualified Data.Text.IO               as TIO
 import qualified Data.Text.Read             as TR
---import           Debug.Trace
+import           Debug.Trace
 import           LinuxSignal
 import           System.Console.GetOpt
 import           System.Console.Haskeline   hiding (Handler, throwTo)
@@ -794,7 +794,7 @@ data Val = Float Double
          | Dict (H.HashMap T.Text Val)
          | Bool Bool
          | FD Word
-         | VarM VarT
+         | Multi Val
          | Var VarT
          | LinkedStr [Val]
          | Lambda LambdaType ParseEnv (Maybe Env) (Env -> Eval Env)
@@ -808,7 +808,7 @@ instance Show Val where
   show (Bool True)   = "true"
   show (Bool False)  = "false"
   show (FD x)        = "&" ++ show x
-  show (VarM x)      = "$@" ++ show x
+  show (Multi x)      = "$@" ++ show x
   show (Var x)       = "$" ++ show x
   show (LinkedStr x) = concatMap show x
   show Lambda{}      = "{LAMBDA}"
@@ -861,13 +861,13 @@ valExpand _ [] = return []
 valExpand env (Var x:xs) = do
   y <- getVar env x
   (y :) <$> valExpand env xs
-valExpand env (VarM (VarA (-1)):xs) = (args env ++) <$> valExpand env xs
-valExpand env (VarM (VarR n):xs) | n < 1 = (ret env ++) <$> valExpand env xs
-valExpand env (VarM x:xs) = do
-  y <- getVar env x
-  case y of
-    List vs -> (vs ++) <$> valExpand env xs
-    _       -> (y :)   <$> valExpand env xs
+valExpand env (Multi x:xs) = do
+  y <- (concat . valToList) <$> valExpand env [x]
+  (y ++) <$> valExpand env xs
+  where
+    valToList (List x:xs) = x:valToList xs
+    valToList (x:xs) = [x]:valToList xs
+    valToList [] = []
 valExpand env (Lambda Expand _ Nothing x:xs) = do
   renv <- x env
   (ret renv ++) <$> valExpand env xs
@@ -1436,8 +1436,8 @@ ignoreError env e= if ignoreInterpreterError $ flags env
 
 runEvalMain :: Env -> Eval Env -> IO Env
 runEvalMain env (Eval fn) = do
-  Right x <- runExceptT $ ES.catch fn $ handler env
-  return env
+  Right renv <- runExceptT $ ES.catch fn $ handler env
+  return renv
   where
     handler :: Env -> ShError -> ExceptT ShError IO Env
     handler env e@Returned{} = return $ setErrEnv env e
@@ -1554,9 +1554,9 @@ genEval = do
     parseDoller c = do string c
                        s <- get
                        case c of
-                         "$$" -> do put s{addArg=(++ [VarM (VarR (-1))])}
+                         "$$" -> do put s{addArg=(++ [Multi $ Var $ VarR (-1)])}
                                     return c
-                         "$>" -> do put s{addArg=(++ [VarM (VarR (-1))])}
+                         "$>" -> do put s{addArg=(++ [Multi $ Var $ VarR (-1)])}
                                     return c
                          "$." -> do put s{addArg=(Var (VarR 1) :)}
                                     return c
@@ -1782,8 +1782,8 @@ parseVar = do
         '@' -> do
           y <- optional parseVar
           case y of
-            Just (Var v) -> return $ VarM v
-            Nothing      -> return $ VarM $ VarA (-1)
+            Just v@(Var _) -> return $ Multi v
+            Nothing      -> return $ Multi $ Var $ VarA (-1)
         _   -> do
           xs <- many (alphaNumChar <|> oneOf ("_?:" :: String))
           return $ Var $ VarN (T.pack $ x:xs)
@@ -1794,15 +1794,19 @@ parseTilde = try $ char '~' >> notFollowedBy (noneOf ("/ \t\n;|&'\"`<>$)}[]"::St
 parseClsr :: Parser Val
 parseClsr =
   between     (symbol brank "{")  (string "}") (genLambda NoArgs genEval)
-  <|> between (symbol brank "@{") (string "}") (genLambda Normal genEval)
+  <|> between (symbol brank "^{") (string "}") (genLambda Normal genEval)
   <|> between (symbol brank "(")  (string ")") (genLambda Expand genExpr)
-  <|> between (symbol brank "@(") (string ")") (genLambda Purely genExpr)
+  <|> between (symbol brank "@(") (string ")") (Multi <$> genLambda Expand genExpr)
+  <|> between (symbol brank "^(") (string ")") (genLambda Purely genExpr)
   <|> between (symbol brank "<{") (string "}") (genLambda PipeRd genEval)
   <|> between (symbol brank ">{") (string "}") (genLambda PipeWt genEval)
-  <|> try (do string "@"
+  <|> try (do char '^'
+              y <- optional $ char '@'
               x <- parseSym "^-+*/%=~"
               optional $ char '^'
-              genLambda Expand (genExpr' [x, VarM $ VarA (-1)]))
+              case y of
+                Just _ -> Multi <$> genLambda Expand (genExpr' [x, Multi $ Var $ VarR (-1)])
+                _ -> genLambda Expand (genExpr' [x, Multi $ Var $ VarR (-1)]))
   <|> parseList
 
 genLambda :: LambdaType -> Parser (Env -> Eval Env) -> Parser Val

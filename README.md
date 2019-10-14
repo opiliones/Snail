@@ -144,9 +144,9 @@ There are several new syntax to import the concept of functional programing.
   2
   ```
   To use positional parameter like function,
-  "@" has to be add at left paren.
+  "^" has to be add at left paren.
   ```
-  @ @($1+$2) 1 1
+  @ ^($1+$2) 1 1
   @ echo $?
   2
   ```
@@ -200,14 +200,14 @@ There are several new syntax to import the concept of functional programing.
 * Function
   - Definition
     ```
-    @ def func1 @{echo $1}
-    @ def func2 @($1+$2)
+    @ def func1 ^{echo $1}
+    @ def func2 ^($1+$2)
     @ def cont hoge
     ```
     In script (not interactive), multiple definition is not available. 
   - Return Values
     ```
-    @ def multi-values @{: $@}
+    @ def multi-values ^{: $@}
     @ multi-values 1 2 3
     @ echo $?1 $?2 $?3
     1 2 3
@@ -218,16 +218,16 @@ There are several new syntax to import the concept of functional programing.
       It is defined by arithmetic expression or constant.
       Pure function can be used in arithmetic expression.
       ```
-      @ def func2 @($1+$2)
+      @ def func2 ^($1+$2)
       @ echo (func2 1 1)
       2
       ```
-      To referring constant, "@" has to be add in begining of function name.
+      To referring constant, "^" has to be add in begining of function name.
       ```
       @ def cont hoge
-      @ (@cont==hoge) && echo a
+      @ (^cont==hoge) && echo a
       a
-      @ echo @cont
+      @ echo ^cont
       hoge
       ```
     - Non pure function  
@@ -242,7 +242,7 @@ There are several new syntax to import the concept of functional programing.
     @ {(a==b) ||| echo b; echo a}
     b
     ```
-    When arguments are passed to arithmetic expression (not having "@"),
+    When arguments are passed to arithmetic expression (not having "^"),
     it works like ternary operator.
     ```
     @ (a!=a) a b
@@ -251,7 +251,7 @@ There are several new syntax to import the concept of functional programing.
     ``` 
   - Loop
     ```
-    @ loop @{($1>=5) &&& break; echo $1; ($1+1)} 1
+    @ loop ^{($1>=5) &&& break; echo $1; ($1+1)} 1
     1
     2
     3
@@ -435,7 +435,7 @@ There are several new syntax to import the concept of functional programing.
   a
   ```
   ```
-  @ {load ./a; : @{$@}} $ def name-space
+  @ {load ./a; : ^{$@}} $ def name-space
   @ name-space f
   a
   ```
@@ -443,7 +443,7 @@ There are several new syntax to import the concept of functional programing.
   This command makes temporary files and pass the files to the closure as arguments.
   When exiting from closure, these files are removed.
   ```
-  @ tmpf @{ls $1; : $1}
+  @ tmpf ^{ls $1; : $1}
   /tmp/snail2371-1
   @ ls $?
   ls: cannot access '/tmp/snail2371-1': No such file or directory
@@ -452,7 +452,7 @@ There are several new syntax to import the concept of functional programing.
   This command makes temporary directory and pass the files to the closure as argument.
   When exiting from closure, the directory is removed.
   ```
-  @ tmpd @{ls -ld $1; : $1}
+  @ tmpd ^{ls -ld $1; : $1}
   drwx------ 2 root root 4096 Sep 21 23:28 /tmp/snail-146e51aa74ac0b46
   @ ls $?
   ls: cannot access '/tmp/snail-146e51aa74ac0b46': No such file or directory
@@ -541,7 +541,7 @@ There are several new syntax to import the concept of functional programing.
   When the argument closure takes three or more argument,
   you specify multiple values to initial values. 
   ```
-  @ fold @{: ($1+$2) ($2+$3)} 1 2 [3 4 5]
+  @ fold ^{: ($1+$2) ($2+$3)} 1 2 [3 4 5]
   17 14
   ```
 * len  
@@ -549,7 +549,7 @@ There are several new syntax to import the concept of functional programing.
   ```
   @ len [1 2 3] $ echo
   3
-  @ @{len $*} 1 2 3 $ echo
+  @ ^{len $*} 1 2 3 $ echo
   3
   ```
 * lenc  
@@ -640,7 +640,7 @@ There are several new syntax to import the concept of functional programing.
 * shift  
   Unlike sh, this command returns values removed.
   ```
-  @ @{shift; echo $?; echo $@} 1 2 3
+  @ ^{shift; echo $?; echo $@} 1 2 3
   1
   2 3
   ```

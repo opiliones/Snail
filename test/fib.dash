@@ -8,7 +8,6 @@ fib() {
   }
   fib $((n-1))
   local k=$RET
-  local l=$k
   fib $((n-2))
   RET=$((k+RET))
 }
