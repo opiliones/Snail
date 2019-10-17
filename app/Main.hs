@@ -1718,14 +1718,17 @@ genExpr' [x] = return $ \e->do y <- valExpand e [x]
                                          "expect single value but " ++ show x ++ " is empty"
                                  Bool b:_ -> return e{status=b, ret=y}
                                  _ -> return e{status=True, ret=y}
-genExpr' xs@(Str _ s:cs) = case H.lookup s defaultFuncs of
-                           Just (Prim x f _) -> do if x == Purely || x == Expand
-                                                     then return ()
-                                                     else notPureFunc s
-                                                   return $ \e -> valExpand e cs >>= f e
-                           _ -> do chkPureFn s
-                                   return $ evalPure xs
+genExpr' xs@(Str{}:_) = genExprStr xs
 genExpr' xs@(x:_) = return $ evalPure xs
+
+genExprStr xs@(Str _ s:cs) =
+  case H.lookup s defaultFuncs of
+    Just (Prim x f _) -> do if x == Purely || x == Expand
+                              then return ()
+                              else notPureFunc s
+                            return $ \e -> valExpand e cs >>= f e
+    _ -> do chkPureFn s
+            return $ evalPure xs
 
 parseRedirect :: Parser Val
 parseRedirect = (string "<" >> ((string "[2]" >> copyHandle (\e h->e{inn=h}) err)
@@ -1812,8 +1815,8 @@ parseClsr =
               x <- parseSym "^-+*/%=~"
               optional $ char '^'
               case y of
-                Just _ -> Multi <$> genLambda Expand (genExpr' [x, Multi $ Var $ VarR (-1)])
-                _ -> genLambda Expand (genExpr' [x, Multi $ Var $ VarR (-1)]))
+                Just _ -> Multi <$> genLambda Expand (genExprStr [x])
+                _ -> genLambda Expand (genExprStr [x]))
   <|> parseList
 
 genLambda :: LambdaType -> Parser (Env -> Eval Env) -> Parser Val
