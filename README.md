@@ -243,9 +243,9 @@ There are several new syntax to import the concept of functional programing.
     b
     ```
     When arguments are passed to arithmetic expression (not having "^"),
-    it works like ternary operator.
+    When ternary operator is needed, "?" operator can be used as bellow.
     ```
-    @ (a!=a) a b
+    @ (a!=a ?) a b
     @ echo $?
     b
     ``` 
@@ -374,10 +374,10 @@ There are several new syntax to import the concept of functional programing.
   @ false; : 1 2 3 && echo T $@? || echo F $@?
   F 1 2 3
   ```
-* ?  
+* - 
   This command is same as *command $> true*.
   ```
-  @ ? false 1 2 3 && echo $@?
+  @ - false 1 2 3 && echo $@?
   1 2 3
   ```
 * loop  
@@ -462,16 +462,16 @@ There are several new syntax to import the concept of functional programing.
 * read  
   Unlike sh, this command does not bind input to variable, but put it to return value.
   ```
-  @ ? yes | read $ echo
+  @ - yes | read $ echo
   y
-  @ ? yes yes | read -n2 $ echo
+  @ - yes yes | read -n2 $ echo
   ye
-  @ ? yes | read -n2 $ echo
+  @ - yes | read -n2 $ echo
   y
-  @ ? yes | read -Nn2 $ echo
+  @ - yes | read -Nn2 $ echo
   y
   
-  @ ? yes yes | read -ss -n3 $ echo
+  @ - yes yes | read -ss -n3 $ echo
   ye
   ```
 * bool  

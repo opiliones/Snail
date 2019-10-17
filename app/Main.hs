@@ -1121,6 +1121,13 @@ eval' d xs env = do
     List x:ys -> valExpand env zs >>= listDispatch x env . (ys ++)
     ys -> valExpand env zs >>= d env . (ys ++)
 
+typeDispatch :: Env -> [Val] -> Eval Env
+typeDispatch env xs = case ret env of
+  Bool b:_ -> boolDispatch env b [] xs
+  Dict x:_ -> valExpand env xs >>= dictDispatch x env
+  List x:_ -> valExpand env xs >>= listDispatch x env
+  _ -> return env
+
 boolDispatch :: Env -> Bool -> [Val] -> [Val] -> Eval Env
 boolDispatch env b xs ys = do
   (xs2, ys2) <- valExpandInc env xs ys
@@ -1527,7 +1534,7 @@ genEval = do
   where
     table :: [[Operator Parser (Env -> Eval Env)]]
     table = [ [ prefix (string "!") not''
-              , prefix (string "?") truely ]
+              , prefix (string "-") truely ]
             , [ binary (string ";;") comma' ]
             , [ binary (string "|[2]") (pipe' (\o e->e{err=o}))
               , binary (string "|[2=1]" <|> string "|[1=2]") (pipe' (\o e->e{err=o, out=o}))
@@ -1677,7 +1684,7 @@ genRd (Rd r:xs) cmd = genRd xs $ r cmd
 genCmd' :: [Val] -> Parser (Env -> Eval Env)
 genCmd' [] = return return
 genCmd' (c@(Lambda Expand _ _ _):cs) = return $ \e -> do renv <- evalFn e c []
-                                                         boolDispatch renv (status renv) [] cs
+                                                         typeDispatch renv cs
 genCmd' (c@Lambda{}:cs) = return $ \e -> valExpand e cs >>= evalFn e c
 genCmd' (Str _ "let":cs) = return $ \e -> valExpand e cs >>= set e
 genCmd' (Str _ "letr":cs) = return $ \e -> valExpand e cs >>= setRet e
@@ -1702,7 +1709,7 @@ genExpr' :: [Val] -> Parser (Env -> Eval Env)
 genExpr' [] = return return
 genExpr' [Lambda Expand _ _ b] = return b
 genExpr' (Lambda Expand _ _ b:cs) = return $ \e -> do renv <- b e
-                                                      boolDispatch renv (status renv) [] cs
+                                                      typeDispatch renv cs
 genExpr' (c@(Lambda Purely _ _ _):cs) = return $ \e -> valExpand e cs >>= evalFn e c
 genExpr' (c@Lambda{}:cs) = throwSyntax $ NotPureFunc "it"
 genExpr' [x] = return $ \e->do y <- valExpand e [x]
@@ -1849,7 +1856,7 @@ parseStr = toStr . T.pack <$> (quoted '\'' <|> quoted '"')
 genExpr :: Parser (Env -> Eval Env)
 genExpr = try (makeExprParser (((\f e->return e{status=True, ret=[Float f]}) <$> float')
                            <|> try (char '%' >> genFormat)
-                           <|> (some (andSpace $ parseWord "!^-+*/%=~") >>= genExpr'))
+                           <|> (some (andSpace $ parseWord "?!^-+*/%=~") >>= genExpr'))
                            table)
   where
     genFormat = do
@@ -1898,13 +1905,15 @@ genExpr = try (makeExprParser (((\f e->return e{status=True, ret=[Float f]}) <$>
             , [ binary  "==" eq'
               , binary  "="  same'
               , binary  "~"  match' ]
-            , [ prefix  "!"  not''' ]
+            , [ prefix  "!"  not'''
+              , postfix "?"  bool' ]
             , [ binary  "&&" evalIf
               , binary  "||" evalElse
               , binary  "!!" evalNull
               , binary  "|!" evalElseNull ] ]
     binary  name f = InfixL  (f <$ try (symbol brank name))
     prefix  name f = Prefix  (f <$ try (symbol brank name))
+    postfix name f = Postfix (f <$ try (symbol brank name))
 
 brank :: Parser ()
 brank = skipMany (skipSome (oneOf (" \t\n"::String)) <|> comment)
@@ -1987,6 +1996,10 @@ le' = setBinNB (<=)
 gt' = setBinNB (>)
 ge' = setBinNB (>=)
 eq' = setBinVB (==)
+
+bool' f e = do
+  re <- f e
+  return re{ret=Bool (status re):ret re}
 
 same' :: (Env -> Eval Env) -> (Env -> Eval Env) -> Env -> Eval Env
 same' x y e = do
