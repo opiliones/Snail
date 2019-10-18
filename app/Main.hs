@@ -870,7 +870,7 @@ valExpand env (Multi x:xs) = do
     valToList [] = []
 valExpand env (Lambda Expand _ Nothing x:xs) = do
   renv <- x env
-  (ret renv ++) <$> valExpand env xs
+  (take 1 (ret renv) ++) <$> valExpand env xs
 valExpand env (Lambda PipeRd _ Nothing x:xs) = do
   (i,o) <- liftIO PI.createPipe
   liftIO $ PI.setFdOption o PI.CloseOnExec True
@@ -1113,9 +1113,6 @@ eval' d xs env = do
   (ys, zs) <- valExpandInc env [] xs
   case ys of
     [] -> return env
-    f@(Lambda Expand _ _ _):ys -> do
-      renv <- d env [f]
-      boolDispatch renv (status renv) ys zs
     Bool b:ys -> boolDispatch env b ys zs
     Dict x:ys -> valExpand env zs >>= dictDispatch x env . (ys ++)
     List x:ys -> valExpand env zs >>= listDispatch x env . (ys ++)
@@ -1132,10 +1129,14 @@ boolDispatch :: Env -> Bool -> [Val] -> [Val] -> Eval Env
 boolDispatch env b xs ys = do
   (xs2, ys2) <- valExpandInc env xs ys
   case xs2 of
-    [] -> return env
-    x:xs2 -> if b then return env{ret=[x], status=True}
-             else do zs <- valExpand env ys2
-                     return env{ret=xs2 ++ zs, status=True}
+    [] -> return env{ret=[Bool b], status=True}
+    x:xs3 -> if b then return env{ret=[x], status=True}
+             else do
+               (xs4, ys4) <- valExpandInc env xs3 ys2
+               case xs4 of
+                 Bool c:xs5 -> boolDispatch env c xs5 ys4
+                 _ -> do zs <- valExpand env ys4
+                         return env{ret=xs4 ++ zs, status=True}
 
 dictDispatch :: H.HashMap T.Text Val -> Env -> [Val] -> Eval Env
 dictDispatch d env [] = return env{ret=[Dict d], status=True}
@@ -1535,25 +1536,25 @@ genEval = do
     table :: [[Operator Parser (Env -> Eval Env)]]
     table = [ [ prefix (string "!") not''
               , prefix (string "-") truely ]
-            , [ binary (string ";;") comma' ]
             , [ binary (string "|[2]") (pipe' (\o e->e{err=o}))
               , binary (string "|[2=1]" <|> string "|[1=2]") (pipe' (\o e->e{err=o, out=o}))
               , binary (string "|[1]" <|> string "|" >> notFollowedBy "|") (pipe' (\o e->e{out=o})) ]
+            , [ binary (string ";;") comma'
+              , binary (string "&" >> notFollowedBy "&") para ]
+            , [ binary (string "&&") evalIf
+              , binary (string "||") evalElse ]
+            , [ binary (string "&&&") switch
+              , binary (string "|||") switchNot ]
             , [ binary (parseDoller "$$") genL
               , binary (parseDoller "$:") genMap
               , binary (parseDoller "$&" <|> parseDoller "&$") evalIf
               , binary (parseDoller "$|" <|> parseDoller "|$") evalElse
               , binary (parseDoller "$>") genNL
               , binary (parseDoller "$.") genL
-              , binary (parseDoller "$") genL ]
-            , [ binary (string "&&&") switch
-              , binary (string "|||") switchNot
-              , binary (string "&" >> notFollowedBy "&") para
-              , binary (string "&&") evalIf
-              , binary (string "||") evalElse
+              , binary (parseDoller "$") genL
               , binary (string "!!") evalNull
-              , binary (string "|!" <|> string "!|") evalElseNull
-              , newLine ] ]
+              , binary (string "|!" <|> string "!|") evalElseNull ]
+            , [ newLine ] ]
     newLine = InfixL (genNL <$ try (some (lineComment <|> symbol spaces "\n" <|> symbol spaces ";")))
     binary name f = InfixL (f <$ try (andBrank name))
     prefix name f = Prefix (f <$ try (andBrank name))
@@ -1859,7 +1860,7 @@ parseStr = toStr . T.pack <$> (quoted '\'' <|> quoted '"')
 genExpr :: Parser (Env -> Eval Env)
 genExpr = try (makeExprParser (((\f e->return e{status=True, ret=[Float f]}) <$> float')
                            <|> try (char '%' >> genFormat)
-                           <|> (some (andSpace $ parseWord "?!^-+*/%=~") >>= genExpr'))
+                           <|> (some (andBrank $ parseWord "?!^-+*/%=~") >>= genExpr'))
                            table)
   where
     genFormat = do
@@ -1977,8 +1978,8 @@ match' x y e = do
   n <- head . ret <$> x e
   m <- head . ret <$> y e
   case match'' n m of
-    [[]] -> return e{ret=[], status=False}
-    x    -> return e{ret=concat x, status=True}
+    [[]] -> return e{ret=[List []], status=False}
+    x    -> return e{ret=[List $ concat x], status=True}
   where
     match'' :: Val -> Val -> [[Val]]
     match'' (List a) (List b) = concat $ zipWith match'' a b
