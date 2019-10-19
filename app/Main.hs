@@ -870,7 +870,10 @@ valExpand env (Multi x:xs) = do
     valToList [] = []
 valExpand env (Lambda Expand _ Nothing x:xs) = do
   renv <- x env
-  (take 1 (ret renv) ++) <$> valExpand env xs
+  case ret renv of
+    [] -> Eval $ ES.throw $ SomeError [] $
+           "expect single value but empty"
+    r -> (head r:) <$> valExpand env xs
 valExpand env (Lambda PipeRd _ Nothing x:xs) = do
   (i,o) <- liftIO PI.createPipe
   liftIO $ PI.setFdOption o PI.CloseOnExec True
