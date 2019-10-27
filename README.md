@@ -314,11 +314,11 @@ There are several new syntax to import the concept of functional programing.
     ```
     If no value or error status, finish pipeline and do exception process.
     ```
-    @ true 1 2 3 && $$ echo |! echo b
+    @ true 1 2 3 &$$ echo |! echo b
     1 2 3
-    @ false 1 2 3 && $$ echo |! echo b
+    @ false 1 2 3 &$$ echo |! echo b
     b
-    @ true && $$ echo |! echo b
+    @ true &$$ echo |! echo b
     b
     ```
   - Case: pass first values.  
