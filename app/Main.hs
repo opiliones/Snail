@@ -1541,14 +1541,17 @@ genEval = do
               , prefix (string "-") truely ]
             , [ binary (string "|[2]") (pipe' (\o e->e{err=o}))
               , binary (string "|[2=1]" <|> string "|[1=2]") (pipe' (\o e->e{err=o, out=o}))
-              , binary (string "|[1]" <|> string "|" >> notFollowedBy "|") (pipe' (\o e->e{out=o})) ]
+              , binary (string "|[1]" <|> string "|" >> (notFollowedBy $ oneOf ("|!"::String))) (pipe' (\o e->e{out=o})) ]
             , [ binary (string ";;") comma'
-              , binary (string "&" >> notFollowedBy "&") para ]
+              , binary (string "&" >> notFollowedBy (oneOf ("&$"::String))) para ]
             , [ binary (string "&&") evalIf
               , binary (string "||") evalElse ]
             , [ binary (string "&&&") switch
               , binary (string "|||") switchNot ]
-            , [ binary (parseDoller "$$") genL
+            , [ binary (parseDoller "&$$") evalIf
+              , binary (parseDoller "|$$") evalElse
+              , binary (parseDoller "$$") genL
+              , binary (parseDoller "$:") genMap
               , binary (parseDoller "$:") genMap
               , binary (parseDoller "$&" <|> parseDoller "&$") evalIf
               , binary (parseDoller "$|" <|> parseDoller "|$") evalElse
@@ -1565,16 +1568,17 @@ genEval = do
     parseDoller c = do string c
                        s <- get
                        case c of
-                         "$$" -> do put s{addArg=(++ [Multi $ Var $ VarR (-1)])}
-                                    return c
                          "$>" -> do put s{addArg=(++ [Multi $ Var $ VarR (-1)])}
                                     return c
                          "$." -> do put s{addArg=(Var (VarR 1) :)}
                                     return c
                          "$:" -> do put s{addArg= \x->Prim Normal map' [] : x ++ [Var (VarR 1)]}
                                     return c
-                         _ ->  do put s{addArg=(++ [Var (VarR 1)])}
-                                  return c
+                         _ | c `T.isSuffixOf` "$$" -> do
+                                    put s{addArg=(++ [Multi $ Var $ VarR (-1)])}
+                                    return c
+                         _   ->  do put s{addArg=(++ [Var (VarR 1)])}
+                                    return c
 
 
 genL f g e = do
@@ -1840,7 +1844,7 @@ parseDict = DList <$> between (symbol brank "#[") (string "]") (many $ andBrank 
 
 parseSym :: String -> Parser Val
 parseSym b = do
-  t <- T.pack <$> some (noneOf ("# \\\t\n;|&'\"`<>$)}[]" ++ b) <|> escape)
+  t <- T.pack <$> some (noneOf ("# \\\t\n;|!&'\"`<>$)}[]" ++ b) <|> escape)
   ref <- liftIO $ newIORef NoCache
   return $ Str (Just ref) t
   where
