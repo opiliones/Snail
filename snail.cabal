@@ -1,0 +1,84 @@
+cabal-version: 1.12
+
+-- This file has been generated from package.yaml by hpack version 0.31.1.
+--
+-- see: https://github.com/sol/hpack
+--
+-- hash: 94757122741fe1e437e37d7b80a99756d9045e76659fddb2e0ee78781b26d0a0
+
+name:           snail
+version:        0.1.0.0
+description:    Please see the README on Github at <https://github.com/githubuser/snale#readme>
+homepage:       https://github.com/githubuser/snale#readme
+bug-reports:    https://github.com/githubuser/snale/issues
+author:         Author name here
+maintainer:     example@example.com
+copyright:      2018 Author name here
+license:        BSD3
+license-file:   LICENSE
+build-type:     Simple
+extra-source-files:
+    README.md
+    ChangeLog.md
+
+source-repository head
+  type: git
+  location: https://github.com/githubuser/snale
+
+library
+  exposed-modules:
+      LinuxSignal
+  other-modules:
+      Paths_snail
+  hs-source-dirs:
+      src
+  build-depends:
+      base >=4.7 && <5
+    , text
+    , unix
+    , unordered-containers
+  default-language: Haskell2010
+
+executable snail
+  main-is: Main.hs
+  other-modules:
+      Paths_snail
+  hs-source-dirs:
+      app
+  ghc-options: -threaded -feager-blackholing -rtsopts -with-rtsopts=-N -XStrictData -XStrict -O3
+  build-depends:
+      Glob
+    , base >=4.7 && <5
+    , bytestring
+    , debug
+    , directory
+    , filepath
+    , haskeline
+    , megaparsec
+    , mtl
+    , process
+    , regex-posix
+    , safe-exceptions
+    , scientific
+    , snail
+    , split
+    , temporary
+    , text
+    , text-show
+    , transformers
+    , unix
+    , unordered-containers
+  default-language: Haskell2010
+
+test-suite snail-test
+  type: exitcode-stdio-1.0
+  main-is: Spec.hs
+  other-modules:
+      Paths_snail
+  hs-source-dirs:
+      test
+  ghc-options: -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      base >=4.7 && <5
+    , snail
+  default-language: Haskell2010
